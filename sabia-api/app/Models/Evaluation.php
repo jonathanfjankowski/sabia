@@ -7,27 +7,28 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Model AuditLog - Registro de auditoria do sistema
+ * Model Evaluation - Representa uma avaliação de resposta
  */
-class AuditLog extends Model
+class Evaluation extends Model
 {
     use HasFactory;
 
     protected $fillable = [
+        'message_id',
         'user_id',
-        'action',
-        'entity_type',
-        'entity_id',
-        'old_values',
-        'new_values',
-        'ip_address',
-        'user_agent',
+        'rating',
+        'feedback',
+        'sentiment',
     ];
 
     protected $casts = [
-        'old_values' => 'array',
-        'new_values' => 'array',
+        'rating' => 'integer',
     ];
+
+    public function message(): BelongsTo
+    {
+        return $this->belongsTo(Message::class);
+    }
 
     public function user(): BelongsTo
     {

@@ -4,17 +4,18 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Model de Categoria para organização de artigos
+ * Model Category - Representa uma categoria de artigos
  */
 class Category extends Model
 {
     use HasFactory;
 
     /**
-     * Atributos que podem ser preenchidos em massa.
+     * Atributos que podem ser atribuídos em massa
      */
     protected $fillable = [
         'name',
@@ -22,96 +23,48 @@ class Category extends Model
         'description',
         'parent_id',
         'order',
-        'active',
+        'is_active',
     ];
 
     /**
-     * Conversões de atributos.
+     * Atributos que devem ser convertidos
      */
     protected $casts = [
-        'active' => 'boolean',
+        'order' => 'integer',
+        'is_active' => 'boolean',
     ];
 
     /**
-     * Boot do model - gera slug automaticamente.
+     * Relacionamentos
      */
-    protected static function boot()
-    {
-        parent::boot();
-
-        static::creating(function ($category) {
-            if (empty($category->slug)) {
-                $category->slug = Str::slug($category->name);
-            }
-        });
-    }
-
-    /**
-     * Relacionamento com categoria pai.
-     */
-    public function parent()
+    public function parent(): BelongsTo
     {
         return $this->belongsTo(Category::class, 'parent_id');
     }
 
-    /**
-     * Relacionamento com subcategorias.
-     */
-    public function children()
+    public function children(): HasMany
     {
         return $this->hasMany(Category::class, 'parent_id');
     }
 
-    /**
-     * Relacionamento com artigos.
-     */
-    public function articles()
+    public function articles(): HasMany
     {
-        return $this->hasMany(KnowledgeBaseArticle::class);
+        return $this->hasMany(Article::class);
     }
 
     /**
-     * Escopo para categorias ativas.
+     * Escopo para categorias ativas
      */
     public function scopeActive($query)
     {
-        return $query->where('active', true);
+        return $query->where('is_active', true);
     }
 
     /**
-     * Escopo para ordenação.
+     * Escopo para ordenação
      */
     public function scopeOrdered($query)
     {
         return $query->orderBy('order')->orderBy('name');
-    }
-
-    /**
-     * Obtém todas as subcategorias recursivamente.
-     */
-    public function getAllChildren(): array
-    {
-        $children = [];
-        
-        foreach ($this->children as $child) {
-            $children[] = $child;
-            $children = array_merge($children, $child->getAllChildren());
-        }
-        
-        return $children;
-    }
-
-    /**
-     * Conta artigos nesta categoria e subcategorias.
-     */
-    public function countArticlesWithChildren(): int
-    {
-        $count = $this->articles()->published()->count();
-        
-        foreach ($this->children as $child) {
-            $count += $child->countArticlesWithChildren();
-        }
-        
-        return $count;
     }
 }
