@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('primary_color')->default('#3B82F6');
             $table->string('secondary_color')->default('#1E40AF');
             $table->text('welcome_message')->nullable();
-            $table->json('contact_info')->nullable(); // { email, phone, address }
+            $table->jsonb('contact_info')->nullable(); // { email, phone, address }
             $table->boolean('enable_evaluations')->default(true);
             $table->boolean('enable_audit_logs')->default(true);
             $table->timestamps();
@@ -47,7 +47,7 @@ return new class extends Migration
             $table->longText('content'); // Markdown
             $table->foreignId('category_id')->constrained()->onDelete('cascade');
             $table->foreignId('author_id')->constrained('users')->onDelete('set null');
-            $table->json('tags')->nullable(); // Array de tags
+            $table->jsonb('tags')->nullable(); // Array de tags
             $table->boolean('is_published')->default(false);
             $table->timestamp('published_at')->nullable();
             $table->integer('views_count')->default(0);
@@ -56,7 +56,7 @@ return new class extends Migration
             
             // Campos para embedding vectorial (pgvector) - armazenado como JSON no SQLite para desenvolvimento
             // Em produção com PostgreSQL, usar: $table->vector('content_embedding', 768)->nullable();
-            $table->json('content_embedding')->nullable(); // Array de floats com 768 dimensões
+            $table->jsonb('content_embedding')->nullable(); // Array de floats com 768 dimensões
             
             $table->timestamps();
             $table->softDeletes();
@@ -78,7 +78,7 @@ return new class extends Migration
             $table->decimal('confidence_threshold', 3, 2)->default(0.75); // 0.00 a 1.00
             $table->boolean('enable_rag')->default(true);
             $table->boolean('enable_citations')->default(true);
-            $table->json('fallback_providers')->nullable(); // [{ provider, model, api_key }]
+            $table->jsonb('fallback_providers')->nullable(); // [{ provider, model, api_key }]
             $table->timestamps();
         });
 
@@ -91,7 +91,7 @@ return new class extends Migration
             $table->string('source')->default('widget'); // widget, kb, direct
             $table->ipAddress('user_ip')->nullable();
             $table->text('user_agent')->nullable();
-            $table->json('metadata')->nullable(); // Informações adicionais
+            $table->jsonb('metadata')->nullable(); // Informações adicionais
             $table->timestamp('last_activity_at')->useCurrent();
             $table->timestamps();
         });
@@ -102,7 +102,7 @@ return new class extends Migration
             $table->foreignId('conversation_id')->constrained()->onDelete('cascade');
             $table->enum('role', ['user', 'assistant', 'system']);
             $table->text('content');
-            $table->json('citations')->nullable(); // [{ article_id, title, excerpt, score }]
+            $table->jsonb('citations')->nullable(); // [{ article_id, title, excerpt, score }]
             $table->decimal('confidence_score', 3, 2)->nullable(); // 0.00 a 1.00
             $table->boolean('is_flagged')->default(false); // Para moderação
             $table->text('flag_reason')->nullable();
@@ -126,9 +126,9 @@ return new class extends Migration
             $table->foreignId('user_id')->nullable()->constrained()->onDelete('set null');
             $table->string('action'); // create, update, delete, login, etc.
             $table->string('entity_type'); // Article, User, Setting, etc.
-            $table->unsignedBigInteger('entity_id');
-            $table->json('old_values')->nullable();
-            $table->json('new_values')->nullable();
+            $table->bigInteger('entity_id');
+            $table->jsonb('old_values')->nullable();
+            $table->jsonb('new_values')->nullable();
             $table->ipAddress('ip_address')->nullable();
             $table->text('user_agent')->nullable();
             $table->timestamps();
@@ -147,7 +147,7 @@ return new class extends Migration
             $table->integer('tokens_used')->nullable();
             $table->decimal('latency_ms', 10, 2)->nullable();
             $table->string('error_message')->nullable();
-            $table->json('context')->nullable(); // Contexto enviado para IA
+            $table->jsonb('context')->nullable(); // Contexto enviado para IA
             $table->timestamps();
         });
 
