@@ -1,33 +1,26 @@
 ```
-# Environment variables
-.env
-
-# Laravel-specific ignores
-vendor/
-composer.lock
-storage/logs/*
-bootstrap/cache/*
+# Build artifacts
+sabia-frontend/dist/
+sabia-frontend/tsconfig.tsbuildinfo
+sabia-frontend/tsconfig.node.tsbuildinfo
 
 # Dependencies
-node_modules/
+sabia-frontend/node_modules/
+sabia-api/vendor/
 
-# Editor/IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# System files
-.DS_Store
-Thumbs.db
+# Environment
+.env
+.env.local
+.env.*
 
 # Logs
 *.log
 
-# Coverage reports
-coverage/
-htmlcov/
+# IDE
+.vscode/
+.idea/
 
-# Temporary files
-*.tmp
+# OS
+.DS_Store
+Thumbs.db
 ```
