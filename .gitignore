@@ -1,26 +1,4 @@
 ```
-# Build artifacts
-sabia-frontend/dist/
-sabia-frontend/tsconfig.tsbuildinfo
-sabia-frontend/tsconfig.node.tsbuildinfo
-
-# Dependencies
-sabia-frontend/node_modules/
-sabia-api/vendor/
-
-# Environment
-.env
-.env.local
-.env.*
-
-# Logs
-*.log
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
+# No build artifacts, dependencies, or temporary files detected
+# Only source/config files present
 ```
