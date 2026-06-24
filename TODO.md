@@ -330,21 +330,27 @@ src/
 
 ## 🚀 Ordem Sugerida de Implementação
 
-### Fase 1: Fundação (Backend)
-1. Migrations e models
-2. Auth (registro/login com Sanctum)
-3. CRUD básico de conversations e messages
-4. Configurar um provider de IA (OpenAI)
+### Fase 1: Fundação (Backend) ✅ CONCLUÍDA
+1. ✅ Migrations e models
+2. ✅ Auth (registro/login com Sanctum) - já existente no Laravel
+3. ✅ CRUD básico de conversations e messages
+4. ✅ Configurar um provider de IA (OpenAI) - seeders e models prontos
+5. ✅ Controllers principais (ConversationController, DocumentController)
+6. ✅ Rotas API configuradas
 
-### Fase 2: Core Features
-5. Serviço de IA com streaming
-6. Endpoint SSE funcional
-7. Frontend: auth pages + layout
-8. Frontend: lista de conversas + chat básico
+### Fase 2: Core Features ✅ CONCLUÍDA
+7. ✅ Serviço de IA com streaming (OpenAiService, AnthropicService, GoogleAiService)
+8. ✅ Endpoint SSE funcional (MessageController com send e stream)
+9. ✅ AiServiceFactory para factory pattern
+10. ✅ Migrations atualizadas (ai_provider_id em conversations, token_count em messages)
+11. ✅ Models atualizados (Conversation com relacionamento aiProvider)
+12. ✅ Rotas configuradas (/api/conversations/{id}/messages, /api/messages/{id}/stream)
 
-### Fase 3: Editor & Integração
-9. TipTap editor configurado
-10. Ações de IA no editor
+### Fase 3: Frontend (PRÓXIMO)
+13. [ ] Frontend: auth pages + layout
+14. [ ] Frontend: lista de conversas + chat básico
+15. [ ] Integração SSE no frontend (EventSource)
+16. [ ] TipTap editor configurado
 11. Hook useChat com SSE
 12. Auto-save de documentos
 

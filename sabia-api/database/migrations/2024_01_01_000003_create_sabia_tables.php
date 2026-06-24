@@ -87,6 +87,9 @@ return new class extends Migration
             $table->id();
             $table->uuid('session_id')->unique(); // ID para o widget/frontend
             $table->foreignId('user_id')->nullable()->constrained()->onDelete('set null');
+            $table->string('title')->nullable(); // Título da conversa (para editor de texto)
+            $table->string('model')->nullable(); // Modelo de IA selecionado
+            $table->text('system_prompt')->nullable(); // Prompt personalizado do sistema
             $table->string('access_level')->default('public'); // public, internal
             $table->string('source')->default('widget'); // widget, kb, direct
             $table->ipAddress('user_ip')->nullable();
