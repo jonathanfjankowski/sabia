@@ -21,12 +21,16 @@ class Conversation extends Model
     protected $fillable = [
         'session_id',
         'user_id',
+        'title',
+        'model',
+        'system_prompt',
         'access_level',
         'source',
         'user_ip',
         'user_agent',
         'metadata',
         'last_activity_at',
+        'ai_provider_id',
     ];
 
     /**
@@ -67,6 +71,11 @@ class Conversation extends Model
     public function aiLogs(): HasMany
     {
         return $this->hasMany(AiInteractionLog::class);
+    }
+
+    public function aiProvider(): BelongsTo
+    {
+        return $this->belongsTo(AiProvider::class);
     }
 
     /**
