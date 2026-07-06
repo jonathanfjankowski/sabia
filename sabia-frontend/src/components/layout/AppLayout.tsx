@@ -21,6 +21,7 @@ const adminItems: SidebarItem[] = [
   { label: 'Usuários', path: '/admin/users', icon: '👥' },
   { label: 'Config. IA', path: '/admin/settings/ai', icon: '🤖' },
   { label: 'Config. Empresa', path: '/admin/settings/company', icon: '⚙️' },
+  { label: 'Widget', path: '/admin/settings/widget', icon: '💬' },
   { label: 'Lacunas', path: '/admin/knowledge-gaps', icon: '🔍' },
   { label: 'Auditoria', path: '/admin/audit-logs', icon: '📋' },
 ]

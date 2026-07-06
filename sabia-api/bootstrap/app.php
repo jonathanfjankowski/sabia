@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
             'widget.origin' => \App\Http\Middleware\CheckWidgetOrigin::class,
+            'rls.context' => \App\Http\Middleware\SetRlsContext::class,
             'ai.provider' => \App\Http\Middleware\CheckAiProvider::class,
             'ai.configured' => \App\Http\Middleware\EnsureAiProviderConfigured::class,
             'throttle.ai' => \App\Http\Middleware\RateLimitAi::class,

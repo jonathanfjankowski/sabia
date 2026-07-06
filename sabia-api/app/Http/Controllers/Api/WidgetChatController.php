@@ -107,6 +107,12 @@ class WidgetChatController extends Controller
         $citations = [];
         foreach ($searchResults as $result) {
             $ragContext .= "[{$result['article_title']}]\n{$result['content']}\n\n";
+            $citations[] = [
+                'article_id' => $result['article_id'],
+                'title' => $result['article_title'],
+                'excerpt' => $result['content'],
+                'score' => $result['similarity'],
+            ];
         }
 
         $confidence = $this->confidenceEvaluator->evaluate(

@@ -31,7 +31,7 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 
 // ==================== Rotas Protegidas (Autenticado) ====================
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'rls.context'])->group(function () {
     // --- Auth ---
     Route::get('/user', function (Request $request) {
         return $request->user()->load('profile');
@@ -67,11 +67,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // ==================== Rotas Admin (Gestor) ====================
 // ==================== Rotas do Widget (Públicas) ====================
-Route::get('/widget/config', [WidgetChatController::class, 'config']);
+Route::get('/widget/config', [WidgetChatController::class, 'config'])->middleware('widget.origin');
 Route::post('/widget/chat', [WidgetChatController::class, 'chat'])->middleware('widget.origin');
 
 // ==================== Rotas Admin (Gestor) ====================
-Route::middleware(['auth:sanctum', 'role:gestor'])->prefix('admin')->group(function () {
+Route::middleware(['auth:sanctum', 'rls.context', 'role:gestor'])->prefix('admin')->group(function () {
     // Usuários
     Route::apiResource('users', UserController::class);
 
@@ -91,6 +91,8 @@ Route::middleware(['auth:sanctum', 'role:gestor'])->prefix('admin')->group(funct
     Route::post('/settings/ai/test-prompt', [SettingsController::class, 'testPrompt']);
     Route::get('/settings/company', [SettingsController::class, 'getCompanySettings']);
     Route::put('/settings/company', [SettingsController::class, 'updateCompanySettings']);
+    Route::get('/settings/widget', [SettingsController::class, 'getWidgetSettings']);
+    Route::put('/settings/widget', [SettingsController::class, 'updateWidgetSettings']);
 
     // Logs
     Route::get('/audit-logs', [AuditLogController::class, 'index']);

@@ -20,6 +20,7 @@ import { CategoriesList } from './pages/admin/CategoriesList';
 import { UsersList } from './pages/admin/UsersList';
 import { AiSettingsPage } from './pages/admin/AiSettingsPage';
 import { CompanySettingsPage } from './pages/admin/CompanySettingsPage';
+import { WidgetSettingsPage } from './pages/admin/WidgetSettingsPage';
 import { KnowledgeGapsList } from './pages/admin/KnowledgeGapsList';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage';
 
@@ -55,6 +56,7 @@ function App() {
         {/* Admin - Settings */}
         <Route path="/admin/settings/ai" element={<PrivateRoute><AppLayout><AiSettingsPage /></AppLayout></PrivateRoute>} />
         <Route path="/admin/settings/company" element={<PrivateRoute><AppLayout><CompanySettingsPage /></AppLayout></PrivateRoute>} />
+        <Route path="/admin/settings/widget" element={<PrivateRoute><AppLayout><WidgetSettingsPage /></AppLayout></PrivateRoute>} />
 
         {/* Admin - Knowledge Gaps */}
         <Route path="/admin/knowledge-gaps" element={<PrivateRoute><AppLayout><KnowledgeGapsList /></AppLayout></PrivateRoute>} />

@@ -11,22 +11,27 @@ interface UserItem {
 
 export function UsersList() {
   const [users, setUsers] = useState<UserItem[]>([])
-  const [search] = useState('')
+  const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState({ name: '', email: '', password: '', password_confirmation: '', role: 'operador', phone: '' })
 
   useEffect(() => { loadUsers() }, [])
 
-  async function loadUsers() {
+  async function loadUsers(searchTerm?: string) {
     try {
       const params: any = {}
-      if (search) params.search = search
+      if (searchTerm) params.search = searchTerm
       const res = await api.get('/admin/users', { params })
       setUsers(res.data.data || res.data)
     } catch (err) {
       console.error('Erro ao carregar usuários:', err)
     }
+  }
+
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault()
+    loadUsers(search)
   }
 
   function startCreate() {
@@ -67,7 +72,13 @@ export function UsersList() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Usuários</h1>
-        <button onClick={startCreate} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Novo Usuário</button>
+        <div className="flex items-center space-x-3">
+          <form onSubmit={handleSearch} className="flex">
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..." className="px-3 py-2 border border-gray-300 rounded-l-lg text-sm focus:ring-2 focus:ring-indigo-500" />
+            <button type="submit" className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-sm hover:bg-gray-200">Buscar</button>
+          </form>
+          <button onClick={startCreate} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">+ Novo</button>
+        </div>
       </div>
 
       {showForm && (

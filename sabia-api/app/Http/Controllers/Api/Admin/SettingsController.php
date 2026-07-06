@@ -69,6 +69,36 @@ class SettingsController extends Controller
         ]);
     }
 
+    // ==================== Widget Settings ====================
+
+    public function getWidgetSettings()
+    {
+        return response()->json(\App\Models\WidgetSetting::getActive());
+    }
+
+    public function updateWidgetSettings(Request $request)
+    {
+        $validated = $request->validate([
+            'welcome_message' => 'sometimes|string',
+            'support_link' => 'nullable|string|max:500',
+            'support_phone' => 'nullable|string|max:20',
+            'support_start_time' => 'sometimes|string',
+            'support_end_time' => 'sometimes|string',
+            'teams_webhook_url' => 'nullable|string|max:500',
+            'out_of_hours_message' => 'sometimes|string',
+            'maintenance_message' => 'sometimes|string',
+            'allowed_domains' => 'nullable|array',
+            'maintenance_mode' => 'sometimes|boolean',
+        ]);
+
+        $validated['updated_by'] = $request->user()->id;
+
+        $settings = \App\Models\WidgetSetting::getActive();
+        $settings->update($validated);
+
+        return response()->json($settings);
+    }
+
     // ==================== Company/Brand Settings ====================
 
     public function getCompanySettings()

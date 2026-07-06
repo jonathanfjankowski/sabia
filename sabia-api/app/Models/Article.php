@@ -23,6 +23,7 @@ class Article extends Model
         'slug',
         'summary',
         'content',
+        'access_level',
         'category_id',
         'author_id',
         'tags',
