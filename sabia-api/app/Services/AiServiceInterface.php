@@ -9,31 +9,30 @@ interface AiServiceInterface
     /**
      * Envia mensagem para a IA e retorna resposta em streaming
      *
+     * Opções suportadas:
+     * - model: string - modelo a usar
+     * - temperature: float - temperatura (0-1)
+     * - max_tokens: int - max tokens
+     * - on_complete: callable(string $fullResponse, array $metadata) - callback quando stream terminar
+     *
      * @param array $messages Array de mensagens no formato [{role, content}]
-     * @param array $options Opções adicionais (modelo, temperatura, etc)
+     * @param array $options Opções adicionais
      * @return StreamedResponse
      */
     public function chat(array $messages, array $options = []): StreamedResponse;
 
     /**
      * Conta tokens de um texto
-     *
-     * @param string $text
-     * @return int
      */
     public function countTokens(string $text): int;
 
     /**
      * Retorna lista de modelos disponíveis
-     *
-     * @return array
      */
     public function getModels(): array;
 
     /**
      * Valida se a API key está configurada
-     *
-     * @return bool
      */
     public function isValid(): bool;
 }

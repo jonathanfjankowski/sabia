@@ -13,6 +13,8 @@ class AnthropicService implements AiServiceInterface
     protected AiProvider $provider;
     protected string $baseUrl;
     protected array $defaultOptions;
+    protected string $contentBuffer = '';
+    protected array $streamOptions = [];
 
     public function __construct(AiProvider $provider)
     {
@@ -24,14 +26,12 @@ class AnthropicService implements AiServiceInterface
         ];
     }
 
-    /**
-     * @inheritDoc
-     */
     public function chat(array $messages, array $options = []): StreamedResponse
     {
         $options = array_merge($this->defaultOptions, $options);
-        
-        // Anthropic usa formato diferente: system message separada
+        $this->streamOptions = $options;
+        $this->contentBuffer = '';
+
         $systemMessage = '';
         $formattedMessages = [];
         
@@ -46,7 +46,7 @@ class AnthropicService implements AiServiceInterface
             }
         }
         
-        return response()->stream(function () use ($formattedMessages, $systemMessage, $options) {
+        return response()->stream(function () use ($formattedMessages, $systemMessage) {
             try {
                 $response = Http::withHeaders([
                     'x-api-key' => $this->provider->api_key,
@@ -59,7 +59,8 @@ class AnthropicService implements AiServiceInterface
                     'messages' => $formattedMessages,
                     'system' => $systemMessage,
                     'stream' => true,
-                    ...$options,
+                    'model' => $this->streamOptions['model'] ?? $this->defaultOptions['model'],
+                    'max_tokens' => $this->streamOptions['max_tokens'] ?? 2048,
                 ]);
 
                 if ($response->failed()) {
@@ -67,33 +68,26 @@ class AnthropicService implements AiServiceInterface
                         'status' => $response->status(),
                         'body' => $response->body(),
                     ]);
-                    
                     $this->sendErrorChunk('Erro na comunicação com a IA');
                     return;
                 }
 
                 $body = $response->body();
                 $totalTokens = 0;
-                $contentBuffer = '';
 
-                // Processar stream SSE da Anthropic
                 $lines = explode("\n", $body);
                 foreach ($lines as $line) {
                     $line = trim($line);
-                    
-                    if (empty($line) || !str_starts_with($line, 'data: ')) {
-                        continue;
-                    }
+                    if (empty($line) || !str_starts_with($line, 'data: ')) continue;
 
                     $dataStr = substr($line, 6);
-                    
                     try {
                         $data = json_decode($dataStr, true, 512, JSON_THROW_ON_ERROR);
                         $eventType = $data['type'] ?? '';
 
                         match ($eventType) {
-                            'content_block_delta' => $this->handleContentDelta($data, $contentBuffer),
-                            'message_delta' => $this->handleMessageDelta($data, $contentBuffer, $totalTokens),
+                            'content_block_delta' => $this->handleContentDelta($data),
+                            'message_delta' => $this->handleMessageDelta($data, $totalTokens),
                             'message_stop' => $this->handleMessageStop($totalTokens),
                             'error' => $this->sendErrorChunk($data['error']['message'] ?? 'Erro desconhecido'),
                             default => null,
@@ -112,7 +106,6 @@ class AnthropicService implements AiServiceInterface
                     'message' => $e->getMessage(),
                     'trace' => $e->getTraceAsString(),
                 ]);
-                
                 $this->sendErrorChunk('Erro interno ao processar resposta da IA');
             }
         }, 200, [
@@ -122,14 +115,11 @@ class AnthropicService implements AiServiceInterface
         ]);
     }
 
-    /**
-     * Handle content delta events
-     */
-    protected function handleContentDelta(array $data, string &$contentBuffer): void
+    protected function handleContentDelta(array $data): void
     {
         if (isset($data['delta']['text'])) {
             $chunk = $data['delta']['text'];
-            $contentBuffer .= $chunk;
+            $this->contentBuffer .= $chunk;
             
             echo "data: " . json_encode([
                 'chunk' => $chunk,
@@ -141,28 +131,28 @@ class AnthropicService implements AiServiceInterface
         }
     }
 
-    /**
-     * Handle message delta events (usage stats)
-     */
-    protected function handleMessageDelta(array $data, string &$contentBuffer, int &$totalTokens): void
+    protected function handleMessageDelta(array $data, int &$totalTokens): void
     {
         if (isset($data['usage']['output_tokens'])) {
             $totalTokens = $data['usage']['output_tokens'];
         }
     }
 
-    /**
-     * Handle message stop event
-     */
     protected function handleMessageStop(int $totalTokens): void
     {
+        $metadata = ['total_tokens' => $totalTokens];
+        
         echo "data: " . json_encode([
             'chunk' => '',
             'done' => true,
-            'usage' => ['total_tokens' => $totalTokens],
+            'usage' => $metadata,
         ]) . "\n\n";
 
-        // Registrar uso
+        // Callback de conclusão
+        if (!empty($this->streamOptions['on_complete'])) {
+            call_user_func($this->streamOptions['on_complete'], $this->contentBuffer, $metadata);
+        }
+
         if ($totalTokens > 0 && auth()->check()) {
             UsageLog::create([
                 'user_id' => auth()->id(),
@@ -176,18 +166,11 @@ class AnthropicService implements AiServiceInterface
         flush();
     }
 
-    /**
-     * @inheritDoc
-     */
     public function countTokens(string $text): int
     {
-        // Estimativa simples para Anthropic
         return (int) ceil(strlen($text) / 4);
     }
 
-    /**
-     * @inheritDoc
-     */
     public function getModels(): array
     {
         return [
@@ -198,41 +181,23 @@ class AnthropicService implements AiServiceInterface
         ];
     }
 
-    /**
-     * @inheritDoc
-     */
     public function isValid(): bool
     {
-        if (empty($this->provider->api_key)) {
-            return false;
-        }
-
+        if (empty($this->provider->api_key)) return false;
         try {
-            $response = Http::withHeaders([
-                'x-api-key' => $this->provider->api_key,
-                'anthropic-version' => '2023-06-01',
-            ])->get("{$this->baseUrl}/v1/models");
-
-            return $response->successful();
+            return Http::withHeaders(['x-api-key' => $this->provider->api_key, 'anthropic-version' => '2023-06-01'])
+                ->get("{$this->baseUrl}/v1/models")->successful();
         } catch (\Exception $e) {
             Log::error('Erro ao validar Anthropic API key', ['error' => $e->getMessage()]);
             return false;
         }
     }
 
-    /**
-     * Calcula custo baseado nos tokens usados
-     * Preços aproximados Claude 3 Haiku: $0.00025 / 1K input, $0.00125 / 1K output
-     */
     protected function calculateCost(int $tokens): float
     {
-        // Média simplificada: $0.000001 por token
         return $tokens * 0.000001;
     }
 
-    /**
-     * Envia chunk de erro formatado
-     */
     protected function sendErrorChunk(string $message): void
     {
         echo "data: " . json_encode([
@@ -240,7 +205,6 @@ class AnthropicService implements AiServiceInterface
             'done' => true,
             'error' => $message,
         ]) . "\n\n";
-        
         ob_flush();
         flush();
     }

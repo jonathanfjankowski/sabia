@@ -145,16 +145,22 @@ class MessageController extends Controller
         $request->attributes->set('conversation_id', $conversation->id);
         $request->attributes->set('message_id', $message->id);
 
-        // Forçar salvar mensagem do assistente via stream completion
-        $response = $aiService->chat($messages, [
+        // Callback para persistir resposta do assistente após stream
+        $onComplete = function (string $fullResponse, array $metadata) use ($conversation, $citations, $confidence) {
+            $conversation->messages()->create([
+                'role' => 'assistant',
+                'content' => $fullResponse,
+                'citations' => !empty($citations) ? $citations : null,
+                'confidence_score' => $confidence['top_score'] ?? null,
+            ]);
+
+            $conversation->touchActivity();
+        };
+
+        return $aiService->chat($messages, [
             'model' => $conversation->model ?? $aiSettings->model ?? null,
+            'on_complete' => $onComplete,
         ]);
-
-        // Salvar resposta após stream (precisa de callback no Laravel)
-        // Por enquanto, o frontend salvará a resposta final
-        $conversation->touchActivity();
-
-        return $response;
     }
 
     /**
