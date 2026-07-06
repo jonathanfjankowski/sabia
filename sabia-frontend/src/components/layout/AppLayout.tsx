@@ -23,6 +23,10 @@ const adminItems: SidebarItem[] = [
   { label: 'Config. Empresa', path: '/admin/settings/company', icon: '⚙️' },
   { label: 'Widget', path: '/admin/settings/widget', icon: '💬' },
   { label: 'Lacunas', path: '/admin/knowledge-gaps', icon: '🔍' },
+  { label: 'Logs Sistema', path: '/admin/system-logs', icon: '📋' },
+  { label: 'Avaliações', path: '/admin/ratings', icon: '⭐' },
+  { label: 'Chats Widget', path: '/admin/widget-conversations', icon: '💬' },
+  { label: 'Saúde', path: '/admin/health', icon: '❤️' },
   { label: 'Auditoria', path: '/admin/audit-logs', icon: '📋' },
 ]
 

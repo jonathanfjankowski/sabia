@@ -23,6 +23,10 @@ import { CompanySettingsPage } from './pages/admin/CompanySettingsPage';
 import { WidgetSettingsPage } from './pages/admin/WidgetSettingsPage';
 import { KnowledgeGapsList } from './pages/admin/KnowledgeGapsList';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage';
+import { SystemLogsPage } from './pages/admin/SystemLogsPage';
+import { RatingsPage } from './pages/admin/RatingsPage';
+import { WidgetConversationsPage } from './pages/admin/WidgetConversationsPage';
+import { HealthPage } from './pages/admin/HealthPage';
 
 function App() {
   return (
@@ -63,6 +67,10 @@ function App() {
 
         {/* Admin - Audit Logs */}
         <Route path="/admin/audit-logs" element={<PrivateRoute><AppLayout><AuditLogsPage /></AppLayout></PrivateRoute>} />
+        <Route path="/admin/system-logs" element={<PrivateRoute><AppLayout><SystemLogsPage /></AppLayout></PrivateRoute>} />
+        <Route path="/admin/ratings" element={<PrivateRoute><AppLayout><RatingsPage /></AppLayout></PrivateRoute>} />
+        <Route path="/admin/widget-conversations" element={<PrivateRoute><AppLayout><WidgetConversationsPage /></AppLayout></PrivateRoute>} />
+        <Route path="/admin/health" element={<PrivateRoute><AppLayout><HealthPage /></AppLayout></PrivateRoute>} />
 
         {/* Default Redirect */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
