@@ -11,9 +11,14 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-    ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->statefulApi();
+    ->withMiddleware(function (Middleware $middleware) {
+        $middleware->alias([
+            'role' => \App\Http\Middleware\CheckRole::class,
+            'ai.provider' => \App\Http\Middleware\CheckAiProvider::class,
+            'ai.configured' => \App\Http\Middleware\EnsureAiProviderConfigured::class,
+            'throttle.ai' => \App\Http\Middleware\RateLimitAi::class,
+        ]);
     })
-    ->withExceptions(function (Exceptions $exceptions): void {
+    ->withExceptions(function (Exceptions $exceptions) {
         //
     })->create();

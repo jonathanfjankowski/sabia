@@ -5,6 +5,8 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -49,18 +51,44 @@ class User extends Authenticatable
     }
 
     // Relacionamentos
-    public function conversations()
+    public function profile(): HasOne
+    {
+        return $this->hasOne(Profile::class);
+    }
+
+    public function conversations(): HasMany
     {
         return $this->hasMany(Conversation::class);
     }
 
-    public function documents()
+    public function documents(): HasMany
     {
         return $this->hasMany(Document::class);
     }
 
-    public function usageLogs()
+    public function usageLogs(): HasMany
     {
         return $this->hasMany(UsageLog::class);
+    }
+
+    // Role helpers
+    public function isGestor(): bool
+    {
+        return $this->profile && $this->profile->role === 'gestor';
+    }
+
+    public function isOperador(): bool
+    {
+        return $this->profile && $this->profile->role === 'operador';
+    }
+
+    public function hasRole(string $role): bool
+    {
+        return $this->profile && $this->profile->role === $role;
+    }
+
+    public function isActive(): bool
+    {
+        return $this->profile && $this->profile->is_active;
     }
 }

@@ -1,24 +1,107 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { PrivateRoute } from './components/PrivateRoute';
+import { AppLayout } from './components/layout/AppLayout';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
+
+// Knowledge Base
+import { KnowledgeBase } from './pages/kb/KnowledgeBase';
+import { ArticleView } from './pages/kb/ArticleView';
+
+// Admin Pages
+import { ArticlesList } from './pages/admin/ArticlesList';
+import { ArticleEditor } from './pages/admin/ArticleEditor';
+import { CategoriesList } from './pages/admin/CategoriesList';
 
 function App() {
   return (
     <AuthProvider>
       <Routes>
+        {/* Public Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+
+        {/* Protected Routes with Layout */}
         <Route
           path="/dashboard"
           element={
             <PrivateRoute>
-              <Dashboard />
+              <AppLayout>
+                <Dashboard />
+              </AppLayout>
             </PrivateRoute>
           }
         />
+
+        {/* Knowledge Base */}
+        <Route
+          path="/kb"
+          element={
+            <PrivateRoute>
+              <AppLayout>
+                <KnowledgeBase />
+              </AppLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/kb/:slug"
+          element={
+            <PrivateRoute>
+              <AppLayout>
+                <ArticleView />
+              </AppLayout>
+            </PrivateRoute>
+          }
+        />
+
+        {/* Admin - Articles */}
+        <Route
+          path="/admin/articles"
+          element={
+            <PrivateRoute>
+              <AppLayout>
+                <ArticlesList />
+              </AppLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin/articles/new"
+          element={
+            <PrivateRoute>
+              <AppLayout>
+                <ArticleEditor />
+              </AppLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin/articles/:id"
+          element={
+            <PrivateRoute>
+              <AppLayout>
+                <ArticleEditor />
+              </AppLayout>
+            </PrivateRoute>
+          }
+        />
+
+        {/* Admin - Categories */}
+        <Route
+          path="/admin/categories"
+          element={
+            <PrivateRoute>
+              <AppLayout>
+                <CategoriesList />
+              </AppLayout>
+            </PrivateRoute>
+          }
+        />
+
+        {/* Default Redirect */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
