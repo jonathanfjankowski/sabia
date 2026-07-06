@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\DocumentController;
 use App\Http\Controllers\Api\MessageController;
 use App\Http\Controllers\Api\ArticleController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\ChatController;
 
 use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\Admin\SettingsController;
@@ -41,6 +42,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('conversations', ConversationController::class);
     Route::post('/conversations/{id}/messages', [MessageController::class, 'send']);
     Route::get('/messages/{id}/stream', [MessageController::class, 'stream']);
+    Route::post('/conversations/{conversation}/close', [MessageController::class, 'close']);
+    Route::post('/conversations/{conversation}/transfer', [MessageController::class, 'transfer']);
+
+    // --- Chat IA ---
+    Route::post('/chat', [ChatController::class, 'send']);
+    Route::get('/chat/history', [ChatController::class, 'history']);
+    Route::post('/chat/{conversation}/close', [ChatController::class, 'close']);
 
     // --- Documentos (TipTap Editor) ---
     Route::apiResource('documents', DocumentController::class);

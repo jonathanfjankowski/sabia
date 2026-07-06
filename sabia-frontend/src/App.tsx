@@ -10,6 +10,9 @@ import { Dashboard } from './pages/Dashboard';
 import { KnowledgeBase } from './pages/kb/KnowledgeBase';
 import { ArticleView } from './pages/kb/ArticleView';
 
+// Chat
+import { ChatPage } from './pages/chat/ChatPage';
+
 // Admin Pages
 import { ArticlesList } from './pages/admin/ArticlesList';
 import { ArticleEditor } from './pages/admin/ArticleEditor';
@@ -30,6 +33,18 @@ function App() {
             <PrivateRoute>
               <AppLayout>
                 <Dashboard />
+              </AppLayout>
+            </PrivateRoute>
+          }
+        />
+
+        {/* Chat */}
+        <Route
+          path="/conversations"
+          element={
+            <PrivateRoute>
+              <AppLayout>
+                <ChatPage />
               </AppLayout>
             </PrivateRoute>
           }
