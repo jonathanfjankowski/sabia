@@ -44,6 +44,31 @@ class SettingsController extends Controller
         return response()->json($settings);
     }
 
+    // ==================== Test Prompt ====================
+
+    public function testPrompt(Request $request)
+    {
+        $validated = $request->validate([
+            'system_prompt' => 'required|string',
+            'test_message' => 'required|string|max:5000',
+        ]);
+
+        // Simular resposta para teste (sem chamar API real)
+        $messages = [
+            ['role' => 'system', 'content' => $validated['system_prompt']],
+            ['role' => 'user', 'content' => $validated['test_message']],
+        ];
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Prompt testado com sucesso. Em produção, a resposta viria do provedor de IA configurado.',
+            'test_input' => [
+                'system_prompt_preview' => mb_substr($validated['system_prompt'], 0, 200) . '...',
+                'test_message' => $validated['test_message'],
+            ],
+        ]);
+    }
+
     // ==================== Company/Brand Settings ====================
 
     public function getCompanySettings()

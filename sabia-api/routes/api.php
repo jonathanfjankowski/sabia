@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\MessageController;
 use App\Http\Controllers\Api\ArticleController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ChatController;
+use App\Http\Controllers\Api\WidgetChatController;
 
 use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\Admin\SettingsController;
@@ -65,6 +66,11 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 // ==================== Rotas Admin (Gestor) ====================
+// ==================== Rotas do Widget (Públicas) ====================
+Route::get('/widget/config', [WidgetChatController::class, 'config']);
+Route::post('/widget/chat', [WidgetChatController::class, 'chat'])->middleware('widget.origin');
+
+// ==================== Rotas Admin (Gestor) ====================
 Route::middleware(['auth:sanctum', 'role:gestor'])->prefix('admin')->group(function () {
     // Usuários
     Route::apiResource('users', UserController::class);
@@ -82,6 +88,7 @@ Route::middleware(['auth:sanctum', 'role:gestor'])->prefix('admin')->group(funct
     // Configurações
     Route::get('/settings/ai', [SettingsController::class, 'getAiSettings']);
     Route::put('/settings/ai', [SettingsController::class, 'updateAiSettings']);
+    Route::post('/settings/ai/test-prompt', [SettingsController::class, 'testPrompt']);
     Route::get('/settings/company', [SettingsController::class, 'getCompanySettings']);
     Route::put('/settings/company', [SettingsController::class, 'updateCompanySettings']);
 
