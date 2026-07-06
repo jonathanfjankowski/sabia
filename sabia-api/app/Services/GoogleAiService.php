@@ -34,7 +34,7 @@ class GoogleAiService implements AiServiceInterface
         // Google usa formato diferente de mensagens
         $contents = $this->formatMessages($messages);
         
-        return response()->stream(function () use ($contents, $model) {
+        return response()->stream(function () use ($contents, $model, $options) {
             try {
                 $url = "{$this->baseUrl}/models/{$model}:streamGenerateContent?key={$this->provider->api_key}&alt=sse";
                 
@@ -109,11 +109,18 @@ class GoogleAiService implements AiServiceInterface
                 }
 
                 // Enviar sinal de conclusão
+                $metadata = ['total_tokens' => $totalTokens ?: $this->countTokens($contentBuffer)];
+                
                 echo "data: " . json_encode([
                     'chunk' => '',
                     'done' => true,
-                    'usage' => ['total_tokens' => $totalTokens ?: $this->countTokens($contentBuffer)],
+                    'usage' => $metadata,
                 ]) . "\n\n";
+
+                // Callback de conclusão (persistir resposta do assistente)
+                if (!empty($options['on_complete'])) {
+                    call_user_func($options['on_complete'], $contentBuffer, $metadata);
+                }
 
                 // Registrar uso
                 if ($totalTokens > 0 && auth()->check()) {

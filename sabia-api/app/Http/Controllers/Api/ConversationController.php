@@ -87,4 +87,43 @@ class ConversationController extends Controller
 
         return response()->json(['message' => 'Conversation deleted successfully']);
     }
+
+    /**
+     * Export conversation as TXT
+     */
+    public function export(Request $request, int $id)
+    {
+        $conversation = $request->user()
+            ->conversations()
+            ->with('messages')
+            ->findOrFail($id);
+
+        $lines = [];
+        $lines[] = str_repeat('═', 50);
+        $lines[] = 'CONVERSA — ' . ($conversation->title ?? 'Sabiá Chat');
+        $lines[] = str_repeat('═', 50);
+        $lines[] = 'Data: ' . $conversation->created_at->format('d/m/Y H:i');
+        $lines[] = 'Canal: ' . $conversation->source;
+        $lines[] = 'Status: ' . ($conversation->is_closed ? 'Encerrada' : 'Ativa');
+        if ($conversation->rating) {
+            $lines[] = 'Avaliação: ' . str_repeat('⭐', $conversation->rating) . " ({$conversation->rating}/5)";
+        }
+        $lines[] = str_repeat('─', 50);
+        $lines[] = '';
+
+        foreach ($conversation->messages as $msg) {
+            $role = $msg->role === 'user' ? 'Usuário' : ($msg->role === 'assistant' ? 'Sabiá' : 'Sistema');
+            $lines[] = "[{$msg->created_at->format('H:i')}] {$role}:";
+            $lines[] = $msg->content;
+            $lines[] = '';
+        }
+
+        $lines[] = str_repeat('═', 50);
+        $lines[] = 'Exportado em: ' . now()->format('d/m/Y H:i');
+
+        return response(implode("\n", $lines), 200, [
+            'Content-Type' => 'text/plain; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="conversa-' . $conversation->id . '.txt"',
+        ]);
+    }
 }

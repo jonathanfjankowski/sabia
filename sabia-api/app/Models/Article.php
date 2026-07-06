@@ -23,12 +23,15 @@ class Article extends Model
         'slug',
         'summary',
         'content',
+        'access_level',
         'category_id',
         'author_id',
         'tags',
         'is_published',
         'published_at',
         'views_count',
+        'helpful_yes',
+        'helpful_no',
         'avg_rating',
         'rating_count',
         'content_embedding',
@@ -42,14 +45,13 @@ class Article extends Model
         'is_published' => 'boolean',
         'published_at' => 'datetime',
         'views_count' => 'integer',
+        'helpful_yes' => 'integer',
+        'helpful_no' => 'integer',
         'avg_rating' => 'decimal:2',
         'rating_count' => 'integer',
-        'content_embedding' => 'array', // Array de floats para o embedding
+        'content_embedding' => 'array',
     ];
 
-    /**
-     * Relacionamentos
-     */
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
@@ -65,9 +67,16 @@ class Article extends Model
         return $this->hasMany(Evaluation::class);
     }
 
-    /**
-     * Escopo para artigos publicados
-     */
+    public function versions(): HasMany
+    {
+        return $this->hasMany(ArticleVersion::class);
+    }
+
+    public function chunks(): HasMany
+    {
+        return $this->hasMany(ArticleChunk::class);
+    }
+
     public function scopePublished($query)
     {
         return $query->where('is_published', true)
@@ -75,25 +84,16 @@ class Article extends Model
             ->where('published_at', '<=', now());
     }
 
-    /**
-     * Escopo para busca por tags
-     */
     public function scopeWithTag($query, string $tag)
     {
         return $query->whereJsonContains('tags', $tag);
     }
 
-    /**
-     * Incrementa contador de visualizações
-     */
     public function incrementViews(): void
     {
         $this->increment('views_count');
     }
 
-    /**
-     * Atualiza avaliação média após nova avaliação
-     */
     public function updateRating(): void
     {
         $stats = $this->evaluations()
@@ -104,5 +104,26 @@ class Article extends Model
             'avg_rating' => $stats->avg ?? 0,
             'rating_count' => $stats->count ?? 0,
         ]);
+    }
+
+    public function publish(): void
+    {
+        $this->update([
+            'is_published' => true,
+            'published_at' => $this->published_at ?? now(),
+        ]);
+    }
+
+    public function unpublish(): void
+    {
+        $this->update([
+            'is_published' => false,
+            'published_at' => null,
+        ]);
+    }
+
+    public function getAccessLevelAttribute(): string
+    {
+        return 'internal'; // Por padrão, artigos são internos
     }
 }

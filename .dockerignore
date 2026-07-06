@@ -1,0 +1,25 @@
+# Docker - excluir arquivos desnecessários do build context
+.git/
+.gitignore
+.env
+agent/
+.agents/
+.convex/
+skills-lock.json
+
+# Dependências
+sabia-frontend/node_modules/
+sabia-api/node_modules/
+sabia-api/.env
+
+# Build artifacts
+sabia-frontend/dist/
+sabia-api/public/build/
+
+# Database init (não necessário para o build)
+docker/postgres/init.sql
+
+# Sistema
+.DS_Store
+Thumbs.db
+*.log
