@@ -2,65 +2,39 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
-/**
- * Model Conversation - Representa uma sessão de chat
- */
 class Conversation extends Model
 {
-    use HasFactory;
+    use HasUuids;
 
-    /**
-     * Atributos que podem ser atribuídos em massa
-     */
+    public $incrementing = false;
+    protected $keyType = 'string';
+
     protected $fillable = [
-        'session_id',
         'user_id',
-        'title',
-        'model',
-        'system_prompt',
-        'access_level',
+        'session_id',
         'source',
-        'user_ip',
-        'user_agent',
-        'metadata',
-        'last_activity_at',
-        'ai_provider_id',
+        'access_level',
+        'title',
+        'is_closed',
+        'closed_at',
+        'rating',
+        'transfer_status',
     ];
 
-    /**
-     * Atributos que devem ser convertidos
-     */
     protected $casts = [
-        'metadata' => 'array',
-        'last_activity_at' => 'datetime',
+        'is_closed' => 'boolean',
+        'closed_at' => 'datetime',
+        'rating' => 'integer',
     ];
 
-    /**
-     * Boot do model - gera session_id automaticamente
-     */
-    protected static function boot()
-    {
-        parent::boot();
-
-        static::creating(function ($conversation) {
-            if (empty($conversation->session_id)) {
-                $conversation->session_id = Str::uuid();
-            }
-        });
-    }
-
-    /**
-     * Relacionamentos
-     */
     public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(Profile::class, 'user_id');
     }
 
     public function messages(): HasMany
@@ -68,45 +42,28 @@ class Conversation extends Model
         return $this->hasMany(Message::class);
     }
 
-    public function aiLogs(): HasMany
+    public function knowledgeGaps(): HasMany
     {
-        return $this->hasMany(AiInteractionLog::class);
+        return $this->hasMany(KnowledgeGap::class);
     }
 
-    public function aiProvider(): BelongsTo
+    public function scopeOpen($query)
     {
-        return $this->belongsTo(AiProvider::class);
+        return $query->where('is_closed', false);
     }
 
-    /**
-     * Escopo para filtrar por nível de acesso
-     */
-    public function scopeAccessLevel($query, string $level)
+    public function scopeClosed($query)
     {
-        return $query->where('access_level', $level);
+        return $query->where('is_closed', true);
     }
 
-    /**
-     * Escopo para filtrar por fonte
-     */
-    public function scopeSource($query, string $source)
+    public function scopeForUser($query, string $userId)
     {
-        return $query->where('source', $source);
+        return $query->where('user_id', $userId);
     }
 
-    /**
-     * Atualiza última atividade
-     */
-    public function touchActivity(): void
+    public function scopeForSession($query, string $sessionId)
     {
-        $this->update(['last_activity_at' => now()]);
-    }
-
-    /**
-     * Obtém ou cria conversa por session_id
-     */
-    public static function getBySessionId(string $sessionId): ?self
-    {
-        return self::where('session_id', $sessionId)->first();
+        return $query->where('session_id', $sessionId);
     }
 }

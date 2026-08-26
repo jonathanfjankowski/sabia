@@ -4,38 +4,28 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Laravel\Sanctum\HasApiTokens;
 
+#[Fillable(['name', 'email', 'password', 'id'])]
+#[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable, HasUuids;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
-    protected $fillable = [
-        'name',
-        'email',
-        'password',
-    ];
+    public $incrementing = false;
+    protected $keyType = 'string';
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
-    protected $hidden = [
-        'password',
-        'remember_token',
-    ];
+    public function profile()
+    {
+        return $this->hasOne(Profile::class, 'user_id');
+    }
 
     /**
      * Get the attributes that should be cast.
@@ -48,47 +38,5 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
-    }
-
-    // Relacionamentos
-    public function profile(): HasOne
-    {
-        return $this->hasOne(Profile::class);
-    }
-
-    public function conversations(): HasMany
-    {
-        return $this->hasMany(Conversation::class);
-    }
-
-    public function documents(): HasMany
-    {
-        return $this->hasMany(Document::class);
-    }
-
-    public function usageLogs(): HasMany
-    {
-        return $this->hasMany(UsageLog::class);
-    }
-
-    // Role helpers
-    public function isGestor(): bool
-    {
-        return $this->profile && $this->profile->role === 'gestor';
-    }
-
-    public function isOperador(): bool
-    {
-        return $this->profile && $this->profile->role === 'operador';
-    }
-
-    public function hasRole(string $role): bool
-    {
-        return $this->profile && $this->profile->role === $role;
-    }
-
-    public function isActive(): bool
-    {
-        return $this->profile && $this->profile->is_active;
     }
 }

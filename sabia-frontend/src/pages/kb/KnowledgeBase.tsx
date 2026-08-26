@@ -1,188 +1,264 @@
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import api from '../../services/api'
-
-interface Category {
-  id: number
-  name: string
-  slug: string
-  description: string | null
-  articles_count: number
-}
-
-interface Article {
-  id: number
-  title: string
-  slug: string
-  summary: string | null
-  category: { id: number; name: string }
-  author: { id: number; name: string }
-  tags: string[] | null
-  is_published: boolean
-  published_at: string | null
-  views_count: number
-  avg_rating: number
-  created_at: string
-}
+import { useEffect, useMemo, useState, useRef } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Search, BookOpen, Eye, ThumbsUp, ChevronRight, Filter, X } from 'lucide-react'
+import { api } from '@/lib/api'
+import type { Article, Category } from '@/types'
+import { PageHeader } from '@/components/common/PageHeader'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { EmptyState } from '@/components/common/EmptyState'
+import { CategoryIcon } from '@/components/common/CategoryIcon'
+import { formatRelativeTime, cn } from '@/lib/utils'
 
 export function KnowledgeBase() {
-  const [categories, setCategories] = useState<Category[]>([])
+  const [searchParams, setSearchParams] = useSearchParams()
+  const q = searchParams.get('q') ?? ''
+  const [search, setSearch] = useState(q)
   const [articles, setArticles] = useState<Article[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(null)
+  const [activeCategory, setActiveCategory] = useState<number | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Carrega artigos + categorias na montagem
   useEffect(() => {
-    loadCategories()
-    loadArticles()
+    Promise.all([api.get<Article[]>('/articles'), api.get<Category[]>('/categories')])
+      .then(([a, c]) => {
+        setArticles(Array.isArray(a) ? a : [])
+        setCategories(Array.isArray(c) ? c : [])
+      })
+      .finally(() => setLoading(false))
   }, [])
 
+  // Sincroniza busca da query param da URL
   useEffect(() => {
-    loadArticles()
-  }, [selectedCategory])
+    setSearch(q)
+  }, [q])
 
-  async function loadCategories() {
-    try {
-      const res = await api.get('/categories', { params: { active: true, per_page: 50 } })
-      setCategories(res.data.data || res.data)
-    } catch (err) {
-      console.error('Erro ao carregar categorias:', err)
-    }
-  }
+  // Busca via API com debounce quando há query
+  useEffect(() => {
+    if (!q.trim()) return // no API search for empty query
 
-  async function loadArticles() {
     setLoading(true)
-    try {
-      const params: any = { status: 'published', per_page: 20 }
-      if (selectedCategory) params.category_id = selectedCategory
-      const res = await api.get('/articles', { params })
-      setArticles(res.data.data || res.data)
-    } catch (err) {
-      console.error('Erro ao carregar artigos:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
+    if (timerRef.current) clearTimeout(timerRef.current)
 
-  async function handleSearch(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    try {
-      const params: any = { status: 'published', per_page: 20 }
-      if (search) params.search = search
-      if (selectedCategory) params.category_id = selectedCategory
-      const res = await api.get('/articles', { params })
-      setArticles(res.data.data || res.data)
-    } catch (err) {
-      console.error('Erro na busca:', err)
-    } finally {
-      setLoading(false)
+    timerRef.current = setTimeout(async () => {
+      try {
+        const results = await api.get<Article[]>('/search?q=' + encodeURIComponent(q))
+        let filtered = Array.isArray(results) ? results : []
+        if (activeCategory) {
+          filtered = filtered.filter((a) => a.category_id === activeCategory)
+        }
+        setArticles(filtered)
+      } catch {
+        // keep existing articles on error
+      } finally {
+        setLoading(false)
+      }
+    }, 300)
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [q, activeCategory])
+
+  // Quando não há query, reseta para lista completa
+  useEffect(() => {
+    if (!q.trim() && articles.length > 0 && activeCategory === null) return
+  }, [q])
+
+  const filtered = useMemo(() => {
+    if (q.trim()) return articles // already filtered by API
+    return articles.filter((a) => {
+      if (activeCategory && a.category_id !== activeCategory) return false
+      return true
+    })
+  }, [articles, q, activeCategory])
+
+  const grouped = useMemo(() => {
+    const map = new Map<number, Article[]>()
+    for (const a of filtered) {
+      const key = a.category_id ?? 0
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(a)
+    }
+    return map
+  }, [filtered])
+
+  const handleSearchChange = (value: string) => {
+    setSearch(value)
+    if (value.trim()) {
+      setSearchParams({ q: value })
+    } else {
+      setSearchParams({})
     }
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Base de Conhecimento</h1>
-          <p className="text-sm text-gray-500 mt-1">Encontre artigos e documentações do sistema</p>
-        </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Base de Conhecimento"
+        description="Browse manual de artigos por categoria"
+        icon={<BookOpen className="h-5 w-5" />}
+      />
+
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Busque por título, conteúdo ou palavra-chave..."
+          className="h-11 pl-9 pr-10"
+          value={search}
+          onChange={(e) => handleSearchChange(e.target.value)}
+        />
+        {q && (
+          <button
+            onClick={() => {
+              setSearch('')
+              setSearchParams({})
+            }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-accent"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
-      {/* Search */}
-      <form onSubmit={handleSearch} className="mb-6">
-        <div className="relative">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar artigos..."
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-          />
-          <svg className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <Filter className="h-3.5 w-3.5" />
+          Categorias:
         </div>
-      </form>
-
-      <div className="flex gap-6">
-        {/* Categories sidebar */}
-        <div className="w-64 flex-shrink-0 hidden lg:block">
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Categorias</h3>
-            <button
-              onClick={() => setSelectedCategory(null)}
-              className={`block w-full text-left px-3 py-2 rounded-lg text-sm mb-1 transition-colors ${
-                !selectedCategory ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Todas as categorias
-            </button>
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => setSelectedCategory(cat.id)}
-                className={`block w-full text-left px-3 py-2 rounded-lg text-sm mb-1 transition-colors ${
-                  selectedCategory === cat.id ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span>{cat.name}</span>
-                  <span className="text-xs text-gray-400">{cat.articles_count}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Articles list */}
-        <div className="flex-1">
-          {loading ? (
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="bg-white rounded-lg border border-gray-200 p-6 animate-pulse">
-                  <div className="h-5 bg-gray-200 rounded w-3/4 mb-3"></div>
-                  <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
-                  <div className="h-4 bg-gray-200 rounded w-1/4"></div>
-                </div>
-              ))}
-            </div>
-          ) : articles.length === 0 ? (
-            <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-              <p className="text-gray-500">Nenhum artigo encontrado.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {articles.map((article) => (
-                <Link
-                  key={article.id}
-                  to={`/kb/${article.slug}`}
-                  className="block bg-white rounded-lg border border-gray-200 p-6 hover:border-indigo-300 hover:shadow-sm transition-all"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-1">{article.title}</h3>
-                      {article.summary && (
-                        <p className="text-sm text-gray-600 mb-2 line-clamp-2">{article.summary}</p>
-                      )}
-                      <div className="flex items-center space-x-4 text-xs text-gray-500">
-                        <span className="px-2 py-0.5 bg-gray-100 rounded-full">{article.category?.name}</span>
-                        <span>{article.views_count} visualizações</span>
-                        {article.avg_rating > 0 && (
-                          <span className="text-yellow-600">★ {article.avg_rating.toFixed(1)}</span>
-                        )}
-                      </div>
-                    </div>
-                    <svg className="w-5 h-5 text-gray-400 ml-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </Link>
-              ))}
-            </div>
+        <button
+          onClick={() => setActiveCategory(null)}
+          className={cn(
+            'rounded-full px-3 py-1 text-xs font-medium transition-colors',
+            activeCategory === null
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted text-muted-foreground hover:bg-accent'
           )}
-        </div>
+        >
+          Todas ({articles.length})
+        </button>
+        {categories.map((c) => {
+          const count = articles.filter((a) => a.category_id === c.id && a.status === 'active').length
+          return (
+            <button
+              key={c.id}
+              onClick={() => setActiveCategory(c.id)}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                activeCategory === c.id
+                  ? 'text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-accent'
+              )}
+              style={activeCategory === c.id ? { backgroundColor: c.color } : undefined}
+            >
+              <CategoryIcon name={c.icon} className="h-3 w-3" />
+              {c.name} ({count})
+            </button>
+          )
+        })}
       </div>
+
+      {loading ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-32" />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={<Search className="h-5 w-5" />}
+          title="Nenhum artigo encontrado"
+          description="Tente outra busca ou remova os filtros aplicados."
+        />
+      ) : (
+        <div className="space-y-8">
+          {Array.from(grouped.entries()).map(([categoryId, items]) => {
+            const category = categories.find((c) => c.id === categoryId)
+            return (
+              <section key={categoryId}>
+                {category && (
+                  <div className="mb-3 flex items-center gap-2">
+                    <div
+                      className="flex h-7 w-7 items-center justify-center rounded-lg"
+                      style={{ backgroundColor: `${category.color}20`, color: category.color }}
+                    >
+                      <CategoryIcon name={category.icon} className="h-3.5 w-3.5" />
+                    </div>
+                    <h2 className="text-sm font-semibold tracking-tight">{category.name}</h2>
+                    <span className="text-xs text-muted-foreground">·</span>
+                    <span className="text-xs text-muted-foreground">
+                      {items.length} artigo{items.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                )}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {items.map((a) => (
+                    <ArticleCard key={a.id} article={a} category={category} />
+                  ))}
+                </div>
+              </section>
+            )
+          })}
+        </div>
+      )}
     </div>
+  )
+}
+
+function ArticleCard({ article, category }: { article: Article; category?: Category }) {
+  return (
+    <Link to={`/kb/${article.slug}`}>
+      <Card className="group h-full p-4 transition-all hover:border-primary/40 hover:shadow-elevated">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="line-clamp-2 font-semibold leading-tight group-hover:text-primary">
+            <HighlightText text={article.title} query={article.title} />
+          </h3>
+          <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+        </div>
+        {article.summary && (
+          <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
+            <HighlightText text={article.summary} query={article.summary} />
+          </p>
+        )}
+        <div className="mt-4 flex items-center gap-3 text-xs text-muted-foreground">
+          {category && (
+            <Badge variant="outline" className="border-0 px-0 py-0 text-[11px]" style={{ color: category.color }}>
+              {category.name}
+            </Badge>
+          )}
+          <span className="inline-flex items-center gap-1">
+            <Eye className="h-3 w-3" /> {article.views_count}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <ThumbsUp className="h-3 w-3" /> {article.helpful_yes}
+          </span>
+          <span className="ml-auto">{formatRelativeTime(article.updated_at)}</span>
+        </div>
+      </Card>
+    </Link>
+  )
+}
+
+function HighlightText({ text, query }: { text: string; query?: string }) {
+  if (!query || !query.trim()) return <>{text}</>
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`(${escaped.split(' ').filter(Boolean).join('|')})`, 'gi')
+  const parts = text.split(regex)
+  return (
+    <>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <mark key={i} className="rounded bg-primary/15 px-0.5 text-primary">
+            {part}
+          </mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
   )
 }

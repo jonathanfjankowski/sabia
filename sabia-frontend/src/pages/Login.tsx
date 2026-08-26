@@ -1,96 +1,83 @@
-import { useState, FormEvent } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useState, FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Lock, ArrowRight, Loader2, Sparkles } from 'lucide-react'
+import { api } from '@/lib/api'
+import { useAuthStore } from '@/stores/auth'
+import { useBrandStore } from '@/stores/brand'
+import { applyBrand } from '@/stores/brand'
+import type { Profile } from '@/types'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { toast } from '@/stores/toast'
 
 export function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  
-  const { login } = useAuth();
-  const navigate = useNavigate();
+  const navigate = useNavigate()
+  const setSession = useAuthStore((s) => s.setSession)
+  const brand = useBrandStore((s) => s.brand)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+  applyBrand(brand)
 
+  const handleLogin = async (e: FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
     try {
-      await login(email, password);
-      navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to login. Please check your credentials.');
+      const res = await api.post<{ success: boolean; user: { id: string; email: string; profile?: Profile }; token: string }>('/auth/login', {
+        email,
+        password,
+      })
+      const profile = res.user.profile
+      const flatUser: Profile = profile
+        ? { ...profile, email: res.user.email }
+        : ({ id: res.user.id, email: res.user.email, full_name: '', role: 'operador', is_active: true } as Profile)
+      setSession(flatUser, res.token)
+      toast.success('Login realizado')
+      navigate('/')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Credenciais inválidas')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to Sabiá
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Or{' '}
-            <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-500">
-              create a new account
-            </Link>
-          </p>
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-muted/40 to-muted/10 p-4">
+      <div className="w-full max-w-md space-y-6">
+        <div className="text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Sparkles className="h-6 w-6" />
+          </div>
+          <h1 className="text-2xl font-bold">{brand.app_name}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Acesso interno</p>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded relative" role="alert">
-              <span className="block sm:inline">{error}</span>
+
+        <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="seu@email.com" required />
             </div>
-          )}
-          
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email address
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              placeholder="you@example.com"
-            />
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Senha</Label>
+              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••" required />
+            </div>
+            <Button type="submit" className="w-full" disabled={loading || !email.trim() || !password.trim()}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+              Entrar
+            </Button>
+            <p className="text-center text-xs text-muted-foreground">
+              Use <code className="rounded bg-muted px-1">gestor@sabia.test</code> / <code className="rounded bg-muted px-1">demo</code> (gestor) ou <code className="rounded bg-muted px-1">operador@sabia.test</code> / <code className="rounded bg-muted px-1">demo</code> (operador)
+            </p>
+          </form>
+        </div>
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-              Password
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-            />
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Signing in...' : 'Sign in'}
-            </button>
-          </div>
-        </form>
+        <p className="text-center text-xs text-muted-foreground">
+          {brand.app_name} · Versão interna
+        </p>
       </div>
     </div>
-  );
+  )
 }

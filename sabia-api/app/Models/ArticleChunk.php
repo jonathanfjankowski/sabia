@@ -16,7 +16,7 @@ class ArticleChunk extends Model
     ];
 
     protected $casts = [
-        'embedding' => 'array',
+        'chunk_index' => 'integer',
         'keywords' => 'array',
     ];
 

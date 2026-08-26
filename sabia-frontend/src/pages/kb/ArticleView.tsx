@@ -1,189 +1,170 @@
-import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
-import api from '../../services/api'
-
-interface Article {
-  id: number
-  title: string
-  slug: string
-  summary: string | null
-  content: string
-  category: { id: number; name: string }
-  author: { id: number; name: string }
-  tags: string[] | null
-  views_count: number
-  avg_rating: number
-  rating_count: number
-  published_at: string
-  helpful_yes: number
-  helpful_no: number
-}
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, Eye, ThumbsUp, ThumbsDown, BookOpen, ChevronRight, Clock } from 'lucide-react'
+import { api } from '@/lib/api'
+import type { Article, Category } from '@/types'
+import { MarkdownRenderer } from '@/components/common/MarkdownRenderer'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { CategoryIcon } from '@/components/common/CategoryIcon'
+import { toast } from '@/stores/toast'
+import { formatRelativeTime } from '@/lib/utils'
+import { Link } from 'react-router-dom'
 
 export function ArticleView() {
   const { slug } = useParams<{ slug: string }>()
-  const [article, setArticle] = useState<Article | null>(null)
+  const navigate = useNavigate()
+  const [article, setArticle] = useState<(Article & { category?: Category }) | null>(null)
   const [related, setRelated] = useState<Article[]>([])
   const [loading, setLoading] = useState(true)
+  const [feedback, setFeedback] = useState<'yes' | 'no' | null>(null)
 
   useEffect(() => {
-    if (slug) loadArticle()
-  }, [slug])
-
-  async function loadArticle() {
+    if (!slug) return
     setLoading(true)
+    setArticle(null)
+    setRelated([])
+    setFeedback(null)
+    api
+      .get<Article & { category?: Category }>(`/articles/${slug}`)
+      .then(async (a) => {
+        setArticle(a)
+        const rel = await api.get<Article[]>(`/articles/${a.id}/related`).catch(() => [])
+        setRelated(rel)
+      })
+      .catch(() => {
+        toast.error('Artigo não encontrado')
+        navigate('/kb')
+      })
+      .finally(() => setLoading(false))
+  }, [slug, navigate])
+
+  const handleFeedback = async (helpful: boolean) => {
+    if (!article || feedback) return
+    setFeedback(helpful ? 'yes' : 'no')
     try {
-      const res = await api.get(`/articles/${slug}`)
-      setArticle(res.data)
-
-      // Load related articles
-      try {
-        const relRes = await api.get(`/articles/${res.data.id}/related`)
-        setRelated(relRes.data)
-      } catch {}
-    } catch (err) {
-      console.error('Erro ao carregar artigo:', err)
-    } finally {
-      setLoading(false)
+      const res = await api.post<{ helpful_yes: number; helpful_no: number }>(
+        `/articles/${article.id}/feedback`,
+        { helpful }
+      )
+      setArticle({ ...article, helpful_yes: res.helpful_yes, helpful_no: res.helpful_no })
+      toast.success(helpful ? 'Obrigado pelo feedback!' : 'Feedback registrado')
+    } catch {
+      toast.error('Erro ao enviar feedback')
     }
-  }
-
-  async function sendFeedback(helpful: boolean) {
-    if (!article) return
-    try {
-      await api.post(`/articles/${article.id}/feedback`, { helpful })
-      if (helpful) {
-        setArticle({ ...article, helpful_yes: article.helpful_yes + 1 })
-      } else {
-        setArticle({ ...article, helpful_no: article.helpful_no + 1 })
-      }
-    } catch (err) {
-      console.error('Erro ao enviar feedback:', err)
-    }
-  }
-
-  function renderMarkdown(content: string): string {
-    const raw = marked.parse(content)
-    if (raw instanceof Promise) {
-      return content
-    }
-    return DOMPurify.sanitize(raw)
   }
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-2/3"></div>
-          <div className="h-4 bg-gray-200 rounded w-1/3"></div>
-          <div className="h-4 bg-gray-200 rounded w-1/4"></div>
-          <div className="mt-8 space-y-3">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-4 bg-gray-200 rounded"></div>
-            ))}
-          </div>
-        </div>
+      <div className="mx-auto max-w-3xl space-y-4">
+        <Skeleton className="h-5 w-32" />
+        <Skeleton className="h-10 w-3/4" />
+        <Skeleton className="h-4 w-1/2" />
+        <Skeleton className="h-64 w-full" />
       </div>
     )
   }
 
-  if (!article) {
-    return (
-      <div className="max-w-4xl mx-auto text-center py-12">
-        <p className="text-gray-500">Artigo não encontrado.</p>
-        <Link to="/kb" className="text-indigo-600 hover:text-indigo-500 mt-2 inline-block">
-          ← Voltar para Base de Conhecimento
-        </Link>
-      </div>
-    )
-  }
+  if (!article) return null
 
   return (
-    <div className="max-w-4xl mx-auto">
-      {/* Breadcrumb */}
-      <nav className="text-sm text-gray-500 mb-6">
-        <Link to="/kb" className="hover:text-indigo-600">Base de Conhecimento</Link>
-        {article.category && (
-          <>
-            <span className="mx-2">/</span>
-            <span className="text-gray-700">{article.category.name}</span>
-          </>
-        )}
-        <span className="mx-2">/</span>
-        <span className="text-gray-700">{article.title}</span>
-      </nav>
+    <div className="mx-auto max-w-3xl space-y-6">
+      <button
+        onClick={() => navigate('/kb')}
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Voltar para KB
+      </button>
 
-      <article className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        {/* Header */}
-        <div className="px-8 pt-8 pb-6 border-b border-gray-100">
-          <h1 className="text-3xl font-bold text-gray-900 mb-3">{article.title}</h1>
-          {article.summary && (
-            <p className="text-lg text-gray-600 mb-4">{article.summary}</p>
-          )}
-
-          <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500">
-            {article.category && (
-              <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full font-medium text-xs">
+      <article>
+        <header className="space-y-3 border-b border-border pb-6">
+          {article.category && (
+            <div className="flex items-center gap-2 text-sm">
+              <div
+                className="flex h-6 w-6 items-center justify-center rounded-md"
+                style={{
+                  backgroundColor: `${article.category.color}20`,
+                  color: article.category.color,
+                }}
+              >
+                <CategoryIcon name={article.category.icon} className="h-3 w-3" />
+              </div>
+              <span className="font-medium" style={{ color: article.category.color }}>
                 {article.category.name}
               </span>
-            )}
-            {article.tags?.map((tag) => (
-              <span key={tag} className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs">
-                #{tag}
-              </span>
-            ))}
-            <span>{article.views_count} visualizações</span>
-            <span>Por {article.author?.name || 'Desconhecido'}</span>
-            <span>{new Date(article.published_at).toLocaleDateString('pt-BR')}</span>
+              <ChevronRight className="h-3 w-3 text-muted-foreground" />
+              <span className="text-muted-foreground">{article.title}</span>
+            </div>
+          )}
+          <h1 className="text-3xl font-bold tracking-tight">{article.title}</h1>
+          {article.summary && (
+            <p className="text-lg text-muted-foreground">{article.summary}</p>
+          )}
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <Clock className="h-3 w-3" /> Atualizado {formatRelativeTime(article.updated_at)}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Eye className="h-3 w-3" /> {article.views_count} visualizações
+            </span>
+            <span className="inline-flex items-center gap-1">v{article.version}</span>
+            <Badge variant={article.access_level === 'internal' ? 'default' : 'secondary'}>
+              {article.access_level === 'internal' ? 'Interno' : 'Público'}
+            </Badge>
           </div>
+        </header>
+
+        <div className="py-6">
+          <MarkdownRenderer content={article.content} />
         </div>
 
-        {/* Content (rendered markdown) */}
-        <div
-          className="px-8 py-6 prose prose-lg max-w-none"
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(article.content) }}
-        />
-
-        {/* Feedback */}
-        <div className="px-8 py-6 border-t border-gray-100 bg-gray-50">
-          <p className="text-sm text-gray-600 mb-3">Este artigo foi útil?</p>
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={() => sendFeedback(true)}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-green-50 hover:border-green-300 hover:text-green-700 transition-colors"
+        <div className="rounded-xl border border-border bg-muted/30 p-5 text-center">
+          <p className="text-sm font-medium">Este artigo foi útil?</p>
+          <div className="mt-3 flex justify-center gap-2">
+            <Button
+              variant={feedback === 'yes' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => handleFeedback(true)}
+              disabled={feedback !== null}
             >
-              👍 Sim ({article.helpful_yes})
-            </button>
-            <button
-              onClick={() => sendFeedback(false)}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition-colors"
+              <ThumbsUp className="h-4 w-4" />
+              Sim ({article.helpful_yes})
+            </Button>
+            <Button
+              variant={feedback === 'no' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => handleFeedback(false)}
+              disabled={feedback !== null}
             >
-              👎 Não ({article.helpful_no})
-            </button>
+              <ThumbsDown className="h-4 w-4" />
+              Não ({article.helpful_no})
+            </Button>
           </div>
         </div>
       </article>
 
-      {/* Related Articles */}
       {related.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Artigos Relacionados</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {related.map((relArticle) => (
-              <Link
-                key={relArticle.id}
-                to={`/kb/${relArticle.slug}`}
-                className="bg-white rounded-lg border border-gray-200 p-4 hover:border-indigo-300 hover:shadow-sm transition-all"
-              >
-                <h3 className="font-medium text-gray-900 mb-1">{relArticle.title}</h3>
-                {relArticle.summary && (
-                  <p className="text-sm text-gray-600 line-clamp-2">{relArticle.summary}</p>
-                )}
+        <section className="border-t border-border pt-6">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            <BookOpen className="h-4 w-4" />
+            Artigos relacionados
+          </h2>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {related.map((r) => (
+              <Link key={r.id} to={`/kb/${r.slug}`}>
+                <Card className="group p-3 transition-colors hover:border-primary/40 hover:bg-accent/40">
+                  <h3 className="text-sm font-medium group-hover:text-primary">{r.title}</h3>
+                  {r.summary && (
+                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{r.summary}</p>
+                  )}
+                </Card>
               </Link>
             ))}
           </div>
-        </div>
+        </section>
       )}
     </div>
   )

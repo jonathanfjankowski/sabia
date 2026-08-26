@@ -4,155 +4,220 @@ namespace App\Services;
 
 use App\Models\Article;
 use App\Models\ArticleChunk;
+use App\Models\AiSettings;
+use App\Services\AIProvider;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
+/**
+ * Service para dividir artigos em chunks e gerar embeddings.
+ *
+ * Usa configurações de ai_settings: chunk_size, chunk_overlap, embedding_model.
+ * Chamado automaticamente ao salvar/atualizar artigo (store/update/destroy).
+ */
 class ArticleChunkService
 {
-    /**
-     * Tamanho padrão de cada chunk em caracteres
-     */
-    protected int $chunkSize = 500;
-
-    /**
-     * Sobreposição entre chunks em caracteres
-     */
-    protected int $chunkOverlap = 100;
-
-    /**
-     * Processar artigo: dividir em chunks e salvar
-     */
-    public function processArticle(Article $article): void
-    {
-        // Remover chunks antigos
-        $article->chunks()->delete();
-
-        $chunks = $this->splitIntoChunks($article->content);
-
-        foreach ($chunks as $index => $chunkText) {
-            $keywords = $this->extractKeywords($chunkText);
-
-            ArticleChunk::create([
-                'article_id' => $article->id,
-                'content' => $chunkText,
-                'chunk_index' => $index,
-                'keywords' => $keywords,
-            ]);
-        }
+    public function __construct(
+        private AiSettings $settings = null,
+    ) {
+        $this->settings ??= AiSettings::current();
     }
 
     /**
-     * Dividir texto em chunks com sobreposição
+     * Processa um artigo: apaga chunks antigos, cria novos, gera embeddings.
+     *
+     * @return int Quantidade de chunks criados
      */
-    public function splitIntoChunks(string $text): array
+    public function process(Article $article): int
     {
-        // Remover markdown formatting para split mais limpo
-        $cleanText = strip_tags($text);
-        $cleanText = preg_replace('/#{1,6}\s+/', '', $cleanText);
-        $cleanText = preg_replace('/[*_~`]/', '', $cleanText);
+        // 1) Delete old chunks
+        ArticleChunk::where('article_id', $article->id)->delete();
 
-        $length = mb_strlen($cleanText);
+        // 2) Split content into chunks
+        $chunks = $this->splitContent($article->content);
 
-        if ($length <= $this->chunkSize) {
-            return [trim($cleanText)];
+        if (empty($chunks)) {
+            return 0;
+        }
+
+        // 3) Generate embeddings + save
+        $provider = new AIProvider($this->settings);
+        $created = 0;
+
+        foreach ($chunks as $index => $content) {
+            // Skip empty chunks
+            $content = trim($content);
+            if ($content === '') continue;
+
+            try {
+                $embedding = $provider->embed($content);
+                if (empty($embedding)) {
+                    app(\App\Services\SystemLogService::class)->log(
+                        'warning', 'chunk_embedding', 'Embedding vazio para chunk',
+                        ['article_id' => $article->id, 'chunk_index' => $index]
+                    );
+                    continue;
+                }
+
+                ArticleChunk::create([
+                    'article_id' => $article->id,
+                    'content' => $content,
+                    'chunk_index' => $index,
+                    'embedding' => $embedding,
+                    'keywords' => $this->extractKeywords($content),
+                ]);
+                $created++;
+            } catch (\Throwable $e) {
+                app(\App\Services\SystemLogService::class)->log(
+                    'error', 'chunk_embedding', 'Falha ao gerar embedding',
+                    ['article_id' => $article->id, 'chunk_index' => $index, 'error' => $e->getMessage()]
+                );
+            }
+        }
+
+        return $created;
+    }
+
+    /**
+     * Divide texto em chunks respeitando chunk_size e chunk_overlap.
+     * Tenta quebrar em parágrafos primeiro; fallback para caracteres.
+     *
+     * @return array<string> Lista de chunks
+     */
+    private function splitContent(string $content): array
+    {
+        $chunkSize = (int) $this->settings->chunk_size;
+        $overlap = (int) $this->settings->chunk_overlap;
+
+        // Normalize line endings
+        $content = Str::replace("\r\n", "\n", $content);
+        $content = Str::replace("\r", "\n", $content);
+
+        // Try paragraph-based splitting first (more semantic)
+        $paragraphs = array_filter(
+            explode("\n\n", $content),
+            fn ($p) => trim($p) !== ''
+        );
+
+        if (count($paragraphs) <= 1) {
+            // Single paragraph or no paragraphs — fallback to character-based
+            return $this->splitByCharacters($content, $chunkSize, $overlap);
+        }
+
+        $chunks = [];
+        $current = '';
+        $buffer = '';
+
+        foreach ($paragraphs as $paragraph) {
+            $paragraph = trim($paragraph) . "\n\n";
+
+            // If adding this paragraph exceeds chunk_size, finalize current chunk
+            if (Str::length($current) + Str::length($paragraph) > $chunkSize && $current !== '') {
+                $chunks[] = trim($current);
+                // Start new chunk with overlap from end of previous
+                $current = $this->getOverlap($current, $overlap) . $paragraph;
+            } else {
+                $current .= $paragraph;
+            }
+        }
+
+        if ($current !== '') {
+            $chunks[] = trim($current);
+        }
+
+        // Safety: ensure no chunk exceeds chunk_size significantly
+        $final = [];
+        foreach ($chunks as $chunk) {
+            if (Str::length($chunk) <= $chunkSize * 1.2) {
+                $final[] = $chunk;
+            } else {
+                // Split oversized chunk by characters
+                $final = array_merge($final, $this->splitByCharacters($chunk, $chunkSize, $overlap));
+            }
+        }
+
+        return $final;
+    }
+
+    /**
+     * Fallback: split by characters with overlap.
+     */
+    private function splitByCharacters(string $text, int $chunkSize, int $overlap): array
+    {
+        $text = trim($text);
+        if (Str::length($text) <= $chunkSize) {
+            return [$text];
         }
 
         $chunks = [];
         $start = 0;
+        $len = Str::length($text);
 
-        while ($start < $length) {
-            $end = $start + $this->chunkSize;
+        while ($start < $len) {
+            $end = min($start + $chunkSize, $len);
+            $chunk = Str::substr($text, $start, $end - $start);
 
-            if ($end >= $length) {
-                $chunks[] = trim(mb_substr($cleanText, $start));
-                break;
+            // Try to break at sentence boundary
+            if ($end < $len) {
+                $lastPunct = max(
+                    Str::lastIndexOf($chunk, '. '),
+                    Str::lastIndexOf($chunk, '! '),
+                    Str::lastIndexOf($chunk, '? ')
+                );
+                if ($lastPunct > $chunkSize * 0.5) {
+                    $end = $start + $lastPunct + 1;
+                    $chunk = Str::substr($text, $start, $end - $start);
+                }
             }
 
-            // Tentar quebrar em final de frase ou parágrafo
-            $segment = mb_substr($cleanText, $start, $this->chunkSize);
-            $breakPoint = $this->findBreakPoint($segment);
-
-            $chunks[] = trim(mb_substr($cleanText, $start, $breakPoint));
-            $start = $start + $breakPoint - $this->chunkOverlap;
+            $chunks[] = trim($chunk);
+            $start = $end - $overlap;
+            if ($start < 0) $start = 0;
         }
 
         return $chunks;
     }
 
     /**
-     * Encontrar melhor ponto de quebra (final de frase ou parágrafo)
+     * Extrai último N caracteres para overlap.
      */
-    protected function findBreakPoint(string $text): int
+    private function getOverlap(string $text, int $overlap): string
     {
-        $length = mb_strlen($text);
-
-        // Procurar por quebras de parágrafo primeiro
-        $paraBreak = mb_strrpos($text, "\n\n");
-        if ($paraBreak !== false && $paraBreak > $length * 0.5) {
-            return $paraBreak;
-        }
-
-        // Procurar por final de frase
-        foreach (['. ', '! ', '? ', '.\n', '!\n', '?\n'] as $delimiter) {
-            $pos = mb_strrpos($text, $delimiter);
-            if ($pos !== false && $pos > $length * 0.5) {
-                return $pos + mb_strlen($delimiter);
-            }
-        }
-
-        // Procurar por vírgula ou ponto e vírgula
-        $commaBreak = mb_strrpos($text, ', ');
-        if ($commaBreak !== false && $commaBreak > $length * 0.5) {
-            return $commaBreak + 2;
-        }
-
-        // Procurar por espaço
-        $spaceBreak = mb_strrpos($text, ' ');
-        if ($spaceBreak !== false) {
-            return $spaceBreak + 1;
-        }
-
-        return $length;
+        $len = Str::length($text);
+        if ($len <= $overlap) return $text;
+        return Str::substr($text, $len - $overlap);
     }
 
     /**
-     * Extrair palavras-chave de um texto
+     * Extrai palavras-chave simples (top 10 palavras > 3 chars).
+     * Usado para busca híbrida futura.
+     *
+     * @return array<string>
      */
-    public function extractKeywords(string $text): array
+    private function extractKeywords(string $content): array
     {
-        // Palavras comuns em português para ignorar
-        $stopWords = [
-            'a', 'ao', 'aos', 'aquela', 'aquelas', 'aquele', 'aqueles',
-            'com', 'como', 'da', 'das', 'de', 'dela', 'delas', 'dele', 'deles',
-            'do', 'dos', 'e', 'em', 'entre', 'era', 'eram', 'essa', 'essas',
-            'esse', 'esses', 'esta', 'estas', 'este', 'estes', 'eu',
-            'foi', 'foram', 'há', 'isso', 'isto', 'já', 'lhe', 'lhes',
-            'mais', 'mas', 'me', 'mesmo', 'na', 'nas', 'no', 'nos',
-            'nossa', 'nossas', 'nosso', 'nossos', 'num', 'numa', 'o', 'os',
-            'ou', 'para', 'pela', 'pelas', 'pelo', 'pelos', 'por', 'qual',
-            'quando', 'que', 'quem', 'se', 'seja', 'sem', 'seu', 'seus',
-            'sua', 'suas', 'só', 'sobre', 'te', 'tem', 'têm', 'teu', 'teus',
-            'tua', 'tuas', 'um', 'uma', 'umas', 'uns', 'é', 'estão',
+        $words = Str::lower($content);
+        $words = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $words);
+        $words = preg_split('/\s+/', $words, -1, PREG_SPLIT_NO_EMPTY);
+
+        $freq = [];
+        foreach ($words as $w) {
+            if (Str::length($w) < 4) continue; // skip short words
+            if (in_array($w, $this->stopWords(), true)) continue;
+            $freq[$w] = ($freq[$w] ?? 0) + 1;
+        }
+
+        arsort($freq);
+        return array_slice(array_keys($freq), 0, 10);
+    }
+
+    private function stopWords(): array
+    {
+        return [
+            'para', 'com', 'que', 'por', 'uma', 'dos', 'das', 'dos', 'nos', 'nas',
+            'este', 'esta', 'esse', 'essa', 'mais', 'muito', 'como', 'sobre',
+            'entre', 'após', 'antes', 'durante', 'através', 'também', 'mesmo',
+            'outro', 'outra', 'outros', 'outras', 'pode', 'poder', 'devem', 'deve',
         ];
-
-        // Extrair palavras com mais de 3 caracteres
-        $words = str_word_count(mb_strtolower($text), 1, 'àáâãäåèéêëìíîïòóôõöùúûüçñ');
-        $words = array_filter($words, function ($word) use ($stopWords) {
-            return mb_strlen($word) > 3 && !in_array($word, $stopWords);
-        });
-
-        // Contar frequência e pegar as top 10
-        $frequencies = array_count_values($words);
-        arsort($frequencies);
-
-        return array_slice(array_keys($frequencies), 0, 10);
-    }
-
-    public function setChunkSize(int $size): void
-    {
-        $this->chunkSize = max(100, min(2000, $size));
-    }
-
-    public function setChunkOverlap(int $overlap): void
-    {
-        $this->chunkOverlap = max(0, min($this->chunkSize - 1, $overlap));
     }
 }

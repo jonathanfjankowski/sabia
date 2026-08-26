@@ -9,19 +9,18 @@ class KnowledgeGap extends Model
 {
     protected $fillable = [
         'question',
-        'context',
         'conversation_id',
         'session_id',
-        'source',
         'resolved',
         'resolved_by',
         'resolved_at',
-        'resolution_notes',
+        'teams_notified',
     ];
 
     protected $casts = [
         'resolved' => 'boolean',
         'resolved_at' => 'datetime',
+        'teams_notified' => 'boolean',
     ];
 
     public function conversation(): BelongsTo
@@ -29,28 +28,13 @@ class KnowledgeGap extends Model
         return $this->belongsTo(Conversation::class);
     }
 
-    public function resolver(): BelongsTo
+    public function resolvedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'resolved_by');
+        return $this->belongsTo(Profile::class, 'resolved_by');
     }
 
     public function scopeUnresolved($query)
     {
         return $query->where('resolved', false);
-    }
-
-    public function scopeBySource($query, string $source)
-    {
-        return $query->where('source', $source);
-    }
-
-    public function resolve(int $userId, ?string $notes = null): void
-    {
-        $this->update([
-            'resolved' => true,
-            'resolved_by' => $userId,
-            'resolved_at' => now(),
-            'resolution_notes' => $notes,
-        ]);
     }
 }

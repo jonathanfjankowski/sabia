@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\WidgetSettings;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -12,21 +13,37 @@ class SecurityHeaders
     {
         $response = $next($request);
 
-        $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
-        $response->headers->set('X-Frame-Options', 'DENY');
-        $response->headers->set('X-Content-Type-Options', 'nosniff');
-        $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
-        $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+        if (!config('security.enabled', true)) {
+            return $response;
+        }
 
-        // CSP - ajustar conforme necessidade
-        $response->headers->set('Content-Security-Policy',
-            "default-src 'self'; " .
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " .
-            "style-src 'self' 'unsafe-inline'; " .
-            "img-src 'self' data: https:; " .
-            "frame-ancestors 'none'"
-        );
+        $headers = config('security.headers', []);
+
+        // /widget é embedável via iframe — sobrescreve DENY por SAMEORIGIN
+        // e ajusta CSP frame-ancestors para allowed_domains do widget.
+        if ($request->is('widget') || $request->is('widget/*')) {
+            $headers['X-Frame-Options'] = config('security.widget.X-Frame-Options', 'SAMEORIGIN');
+
+            $allowed = WidgetSettings::current()->allowed_domains ?? [];
+            if (!empty($allowed)) {
+                $ancestors = implode(' ', array_map(fn ($d) => 'https://' . ltrim($d, '.'), $allowed));
+                $headers['Content-Security-Policy'] = preg_replace(
+                    "/frame-ancestors [^;]+/",
+                    "frame-ancestors 'self' {$ancestors}",
+                    $headers['Content-Security-Policy'] ?? ''
+                );
+            }
+        }
+
+        foreach ($headers as $header => $value) {
+            $response->headers->set($this->normalize($header), $value);
+        }
 
         return $response;
+    }
+
+    private function normalize(string $header): string
+    {
+        return strtolower(preg_replace('/([a-z])([A-Z])/', '$1-$2', $header));
     }
 }

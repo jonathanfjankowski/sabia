@@ -1,73 +1,45 @@
-# ============================================================
-# Dockerfile - Sabiá API (Laravel 12 + PHP 8.3 + Nginx)
-# ============================================================
-# Build context: raiz do projeto (.)
-# docker build -f sabia-api/Dockerfile .
-# docker-compose usa: context: ., dockerfile: sabia-api/Dockerfile
+# Multi-stage build for Laravel API
+FROM php:8.3-fpm AS base
 
-# ---- Estágio 1: Node para build de assets ----
-FROM node:20-alpine AS node-deps
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    libzip-dev \
+    zip \
+    unzip \
+    libpq-dev \
+    && docker-php-ext-install pdo_pgsql pgsql zip bcmath opcache
 
-WORKDIR /tmp/assets
-COPY sabia-api/package*.json ./
-RUN test -f package.json && npm ci --no-audit --no-fund || echo "Aviso: npm ci falhou ou package.json ausente."
+# Install Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# ---- Estágio 2: Final ----
-FROM php:8.3-fpm-alpine
+# Set working directory
+WORKDIR /var/www
 
-WORKDIR /var/www/html
+# Copy composer files first for caching
+COPY composer.json composer.lock ./
 
-# Instalar Nginx, Supervisor, PostgreSQL client e extensões PHP
-RUN apk add --no-cache \
-        nginx \
-        supervisor \
-        postgresql-client \
-        postgresql-dev \
-        oniguruma-dev \
-        libxml2-dev \
-        libzip-dev \
-        zip \
-        unzip \
-        git \
-        curl \
-        bash \
-    && docker-php-ext-install \
-        pdo_pgsql \
-        pgsql \
-        mbstring \
-        intl \
-        bcmath \
-        zip \
-        pcntl \
-    && docker-php-ext-enable pdo_pgsql pgsql mbstring intl bcmath zip pcntl
+# Install PHP dependencies
+RUN composer install --no-dev --optimize-autoloader --no-interaction
 
-# Composer
-COPY --from=composer:2.8 /usr/bin/composer /usr/bin/composer
+# Copy application code
+COPY . .
 
-# Copiar código da aplicação (contexto raiz: .)
-COPY sabia-api .
+# Generate application key
+RUN php artisan key:generate --force
 
-# Copiar node_modules (se existirem)
-COPY --from=node-deps /tmp/assets/node_modules ./node_modules 2>/dev/null || true
+# Optimize for production
+RUN php artisan config:cache \
+    && php artisan route:cache \
+    && php artisan view:cache
 
-# Copiar configurações Docker (contexto raiz: .)
-COPY docker/laravel/php.ini /usr/local/etc/php/conf.d/sabia.ini
-COPY docker/nginx/default.conf /etc/nginx/http.d/default.conf
-COPY docker/laravel/supervisord.conf /etc/supervisord.conf
-COPY docker/laravel/entrypoint.sh /entrypoint.sh
+# Set permissions
+RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
 
-# Permissões
-RUN chown -R www-data:www-data \
-        /var/www/html/storage \
-        /var/www/html/bootstrap/cache \
-        /var/www/html/public \
-    && chmod -R 775 \
-        /var/www/html/storage \
-        /var/www/html/bootstrap/cache \
-        /var/www/html/public \
-    && chmod +x /entrypoint.sh \
-    && mkdir -p /var/log/supervisor /var/run
+EXPOSE 8000
 
-EXPOSE 80
-
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]

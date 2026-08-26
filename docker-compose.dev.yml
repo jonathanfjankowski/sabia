@@ -1,0 +1,90 @@
+# Dev compose — bind mounts, hot-reload, no nginx. Vite serve na 5173.
+# Sobe com: docker compose -f docker-compose.dev.yml up
+#
+# Após subir:
+#   - Frontend: http://localhost:5173 (Vite dev server)
+#   - API:      http://localhost:8000 (php artisan serve)
+#   - Postgres: localhost:5432 (user: postgres, pass: postgres)
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: sabia_postgres_dev
+    environment:
+      POSTGRES_DB: sabia
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sabia-dev-network
+
+  api:
+    build:
+      context: ./sabia-api
+      dockerfile: Dockerfile.dev
+    container_name: sabia_api_dev
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - APP_URL=http://localhost:8000
+      - DB_CONNECTION=pgsql
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_DATABASE=sabia
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=postgres
+      - SANCTUM_STATEFUL_DOMAINS=localhost:5173
+      - SESSION_DOMAIN=localhost
+      - ALLOWED_ORIGINS=http://localhost:5173
+      - SECURITY_HEADERS_ENABLED=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      # Source bind mount — host edits are visible inside the container.
+      - ./sabia-api:/var/www
+      # Keep vendor/ as a named volume to avoid Windows bind-mount slowness.
+      - api_vendor:/var/www/vendor
+      # Keep storage/ writable.
+      - ./sabia-api/storage:/var/www/storage
+      - ./sabia-api/bootstrap/cache:/var/www/bootstrap/cache
+    networks:
+      - sabia-dev-network
+
+  web:
+    build:
+      context: ./sabia-frontend
+      dockerfile: Dockerfile.dev
+    container_name: sabia_web_dev
+    environment:
+      - VITE_API_URL=http://localhost:8000/api
+    ports:
+      - "5173:5173"
+    volumes:
+      # Source bind mount for hot-reload.
+      - ./sabia-frontend:/app
+      # Keep node_modules/ as a named volume to avoid Windows bind-mount slowness.
+      - web_node_modules:/app/node_modules
+    depends_on:
+      - api
+    networks:
+      - sabia-dev-network
+
+volumes:
+  postgres_dev_data:
+  api_vendor:
+  web_node_modules:
+
+networks:
+  sabia-dev-network:
+    driver: bridge

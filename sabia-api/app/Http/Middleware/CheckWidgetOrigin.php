@@ -2,41 +2,43 @@
 
 namespace App\Http\Middleware;
 
-use App\Models\WidgetSetting;
+use App\Models\WidgetSettings;
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
 class CheckWidgetOrigin
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $origin = $request->header('Origin');
-        $referer = $request->header('Referer');
+        $origin = $request->header('Origin') ?? $request->header('Referer');
+        $host = $origin ? parse_url($origin, PHP_URL_HOST) : null;
 
-        $domain = null;
-        if ($origin) {
-            $domain = parse_url($origin, PHP_URL_HOST);
-        } elseif ($referer) {
-            $domain = parse_url($referer, PHP_URL_HOST);
+        $allowedDomains = WidgetSettings::current()->allowed_domains ?? [];
+
+        if (empty($allowedDomains)) {
+            return $next($request);
         }
 
-        if (!$domain) {
-            return response()->json(['error' => 'Origem não identificada.'], 403);
+        if (!$host) {
+            return $this->forbidden($origin);
         }
 
-        $settings = WidgetSetting::getActive();
-
-        if (!$settings->isDomainAllowed($domain)) {
-            Log::warning('Widget origin not allowed', [
-                'domain' => $domain,
-                'origin' => $origin,
-                'referer' => $referer,
-            ]);
-            return response()->json(['error' => 'Origem não autorizada.'], 403);
+        foreach ($allowedDomains as $domain) {
+            $domain = ltrim($domain, '.');
+            if ($host === $domain || str_ends_with($host, '.' . $domain)) {
+                return $next($request);
+            }
         }
 
-        return $next($request);
+        return $this->forbidden($origin);
+    }
+
+    private function forbidden(?string $origin): Response
+    {
+        return response()->json([
+            'error' => 'Origem não autorizada.',
+            'origin' => $origin,
+        ], 403);
     }
 }

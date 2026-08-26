@@ -9,26 +9,31 @@ use Symfony\Component\HttpFoundation\Response;
 
 class SetRlsContext
 {
-    /**
-     * Define variáveis de sessão no PostgreSQL para RLS (Row Level Security)
-     *
-     * Usa a função set_config do PostgreSQL que aceita parâmetros com bindings.
-     * As RLS policies usam estas variáveis via current_setting().
-     */
-    public function handle(Request $request, Closure $next): Response
+    public function handle(Request $request, Closure $next, string $defaultRole = 'internal'): Response
     {
         $user = $request->user();
-        $sessionId = $request->header('X-Session-Id');
 
-        if ($user) {
-            DB::select("SELECT set_config('app.current_user_id', ?, true)", [(string) $user->id]);
-            DB::select("SELECT set_config('app.current_role', ?, true)", [$user->profile?->role ?? 'operador']);
-        }
+        return DB::transaction(function () use ($request, $next, $user, $defaultRole) {
+            
+            $profileId = $user?->profile?->id ?? $user?->id;
+            if ($profileId) {
+                DB::statement("SELECT set_config('app.current_user_id', ?, true)", [(string) $profileId]);
+            }
 
-        if ($sessionId) {
-            DB::select("SELECT set_config('app.current_session_id', ?, true)", [$sessionId]);
-        }
+            $sessionId = $request->input('session_id') ?? $request->headers->get('X-Session-Id');
+            if ($sessionId) {
+                DB::statement("SELECT set_config('app.current_session_id', ?, true)", [(string) $sessionId]);
+            }
 
-        return $next($request);
+            if ($defaultRole === 'widget' || $user?->tokenCan('widget')) {
+                DB::statement('SET LOCAL ROLE sabia_widget');
+            } elseif ($user?->profile?->isGestor()) {
+                DB::statement('SET LOCAL ROLE sabia_bypass');
+            } else {
+                DB::statement('SET LOCAL ROLE sabia_internal');
+            }
+
+            return $next($request);
+        });
     }
 }

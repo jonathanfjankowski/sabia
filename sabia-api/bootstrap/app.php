@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -11,17 +12,29 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-    ->withMiddleware(function (Middleware $middleware) {
+    ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->validateCsrfTokens(except: [
+            'api/*',
+        ]);
+        $middleware->statefulApi();
+        $middleware->append(\Illuminate\Http\Middleware\HandleCors::class);
+
+        $middleware->appendToGroup('security', [
+            \App\Http\Middleware\SecurityHeaders::class,
+        ]);
+
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
+            'access' => \App\Http\Middleware\CheckAccessLevel::class,
+            'rls' => \App\Http\Middleware\SetRlsContext::class,
             'widget.origin' => \App\Http\Middleware\CheckWidgetOrigin::class,
-            'rls.context' => \App\Http\Middleware\SetRlsContext::class,
-            'security.headers' => \App\Http\Middleware\SecurityHeaders::class,
-            'ai.provider' => \App\Http\Middleware\CheckAiProvider::class,
-            'ai.configured' => \App\Http\Middleware\EnsureAiProviderConfigured::class,
-            'throttle.ai' => \App\Http\Middleware\RateLimitAi::class,
         ]);
+
+        // Global middleware
+        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
     })
-    ->withExceptions(function (Exceptions $exceptions) {
-        //
+    ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->shouldRenderJsonWhen(
+            fn (Request $request) => $request->is('api/*'),
+        );
     })->create();

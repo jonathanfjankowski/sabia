@@ -2,69 +2,52 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
-/**
- * Model Article - Representa um artigo da base de conhecimento
- */
 class Article extends Model
 {
-    use HasFactory, SoftDeletes;
-
-    /**
-     * Atributos que podem ser atribuídos em massa
-     */
     protected $fillable = [
         'title',
         'slug',
-        'summary',
         'content',
-        'access_level',
+        'summary',
         'category_id',
-        'author_id',
-        'tags',
-        'is_published',
-        'published_at',
+        'access_level',
+        'status',
         'views_count',
         'helpful_yes',
         'helpful_no',
-        'avg_rating',
-        'rating_count',
-        'content_embedding',
+        'version',
+        'created_by',
     ];
 
-    /**
-     * Atributos que devem ser convertidos
-     */
     protected $casts = [
-        'tags' => 'array',
-        'is_published' => 'boolean',
-        'published_at' => 'datetime',
         'views_count' => 'integer',
         'helpful_yes' => 'integer',
         'helpful_no' => 'integer',
-        'avg_rating' => 'decimal:2',
-        'rating_count' => 'integer',
-        'content_embedding' => 'array',
+        'version' => 'integer',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Article $article) {
+            if (empty($article->slug)) {
+                $article->slug = Str::slug($article->title) . '-' . Str::random(6);
+            }
+        });
+    }
 
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
     }
 
-    public function author(): BelongsTo
+    public function createdBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'author_id');
-    }
-
-    public function evaluations(): HasMany
-    {
-        return $this->hasMany(Evaluation::class);
+        return $this->belongsTo(Profile::class, 'created_by');
     }
 
     public function versions(): HasMany
@@ -77,53 +60,34 @@ class Article extends Model
         return $this->hasMany(ArticleChunk::class);
     }
 
-    public function scopePublished($query)
+    public function scopeActive($query)
     {
-        return $query->where('is_published', true)
-            ->whereNotNull('published_at')
-            ->where('published_at', '<=', now());
+        return $query->where('status', 'active');
     }
 
-    public function scopeWithTag($query, string $tag)
+    public function scopePublicOnly($query)
     {
-        return $query->whereJsonContains('tags', $tag);
+        return $query->where('access_level', 'public');
     }
 
-    public function incrementViews(): void
+    public function scopeInternalOnly($query)
     {
-        $this->increment('views_count');
+        return $query->where('access_level', 'internal');
     }
 
-    public function updateRating(): void
+    public function scopeForAccessLevel($query, string $level)
     {
-        $stats = $this->evaluations()
-            ->selectRaw('AVG(rating) as avg, COUNT(*) as count')
-            ->first();
-
-        $this->update([
-            'avg_rating' => $stats->avg ?? 0,
-            'rating_count' => $stats->count ?? 0,
-        ]);
+        return $level === 'internal'
+            ? $query
+            : $query->publicOnly();
     }
 
-    public function publish(): void
+    public function registerFeedback(bool $helpful): void
     {
-        $this->update([
-            'is_published' => true,
-            'published_at' => $this->published_at ?? now(),
-        ]);
-    }
-
-    public function unpublish(): void
-    {
-        $this->update([
-            'is_published' => false,
-            'published_at' => null,
-        ]);
-    }
-
-    public function getAccessLevelAttribute(): string
-    {
-        return 'internal'; // Por padrão, artigos são internos
+        if ($helpful) {
+            $this->increment('helpful_yes');
+        } else {
+            $this->increment('helpful_no');
+        }
     }
 }

@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: sabia_postgres
+    environment:
+      POSTGRES_DB: sabia
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sabia-network
+
+  api:
+    build:
+      context: ./sabia-api
+      dockerfile: Dockerfile
+    container_name: sabia_api
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - APP_URL=https://api.seudominio.com
+      - DB_CONNECTION=pgsql
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_DATABASE=sabia
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=${DB_PASSWORD}
+      - SANCTUM_STATEFUL_DOMAINS=seudominio.com
+      - SESSION_DOMAIN=seudominio.com
+      - ALLOWED_ORIGINS=https://seudominio.com
+      - SECURITY_HEADERS_ENABLED=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    networks:
+      - sabia-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  web:
+    build:
+      context: ./sabia-frontend
+      dockerfile: Dockerfile
+    container_name: sabia_web
+    environment:
+      - VITE_API_URL=https://api.seudominio.com/api
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+    networks:
+      - sabia-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+volumes:
+  postgres_data:
+
+networks:
+  sabia-network:
+    driver: bridge

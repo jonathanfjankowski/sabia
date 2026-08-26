@@ -1,20 +1,29 @@
-# Dockerfile para o Frontend React (Sabiá Frontend)
-
-FROM node:20-alpine
+# Multi-stage build for React frontend
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copiar package.json e package-lock.json
-COPY package*.json ./
+# Copy package files
+COPY package.json package-lock.json ./
 
-# Instalar dependências
-RUN npm install
+# Install dependencies
+RUN npm ci
 
-# Copiar arquivos da aplicação (será sobrescrito pelo volume)
+# Copy source code
 COPY . .
 
-# Expor porta do Vite
-EXPOSE 5173
+# Build production
+RUN npm run build
 
-# Comando padrão
-CMD ["npm", "run", "dev"]
+# Production stage with nginx
+FROM nginx:alpine AS production
+
+# Copy built assets
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Copy nginx config
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

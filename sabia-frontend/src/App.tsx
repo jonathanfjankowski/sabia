@@ -1,83 +1,29 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
-import { PrivateRoute } from './components/PrivateRoute';
-import { AppLayout } from './components/layout/AppLayout';
-import { Login } from './pages/Login';
-import { Register } from './pages/Register';
-import { Dashboard } from './pages/Dashboard';
-
-// Chat
-import { ChatPage } from './pages/chat/ChatPage';
-
-// Knowledge Base
-import { KnowledgeBase } from './pages/kb/KnowledgeBase';
-import { ArticleView } from './pages/kb/ArticleView';
-
-// Admin Pages
-import { ArticlesList } from './pages/admin/ArticlesList';
-import { ArticleEditor } from './pages/admin/ArticleEditor';
-import { CategoriesList } from './pages/admin/CategoriesList';
-import { UsersList } from './pages/admin/UsersList';
-import { AiSettingsPage } from './pages/admin/AiSettingsPage';
-import { CompanySettingsPage } from './pages/admin/CompanySettingsPage';
-import { WidgetSettingsPage } from './pages/admin/WidgetSettingsPage';
-import { KnowledgeGapsList } from './pages/admin/KnowledgeGapsList';
-import { AuditLogsPage } from './pages/admin/AuditLogsPage';
-import { SystemLogsPage } from './pages/admin/SystemLogsPage';
-import { RatingsPage } from './pages/admin/RatingsPage';
-import { WidgetConversationsPage } from './pages/admin/WidgetConversationsPage';
-import { HealthPage } from './pages/admin/HealthPage';
+import { useEffect } from 'react'
+import { RouterProvider } from 'react-router-dom'
+import { router } from '@/routes'
+import { Toaster } from '@/components/ui/toaster'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { useThemeStore, applyTheme } from '@/stores/theme'
+import { useBrandStore, applyBrand } from '@/stores/brand'
 
 function App() {
+  const mode = useThemeStore((s) => s.mode)
+  const brand = useBrandStore((s) => s.brand)
+
+  useEffect(() => {
+    applyTheme(mode)
+  }, [mode])
+
+  useEffect(() => {
+    applyBrand(brand)
+  }, [brand])
+
   return (
-    <AuthProvider>
-      <Routes>
-        {/* Public Routes */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-
-        {/* Protected Routes */}
-        <Route path="/dashboard" element={<PrivateRoute><AppLayout><Dashboard /></AppLayout></PrivateRoute>} />
-
-        {/* Chat */}
-        <Route path="/conversations" element={<PrivateRoute><AppLayout><ChatPage /></AppLayout></PrivateRoute>} />
-
-        {/* Knowledge Base */}
-        <Route path="/kb" element={<PrivateRoute><AppLayout><KnowledgeBase /></AppLayout></PrivateRoute>} />
-        <Route path="/kb/:slug" element={<PrivateRoute><AppLayout><ArticleView /></AppLayout></PrivateRoute>} />
-
-        {/* Admin - Articles */}
-        <Route path="/admin/articles" element={<PrivateRoute><AppLayout><ArticlesList /></AppLayout></PrivateRoute>} />
-        <Route path="/admin/articles/new" element={<PrivateRoute><AppLayout><ArticleEditor /></AppLayout></PrivateRoute>} />
-        <Route path="/admin/articles/:id" element={<PrivateRoute><AppLayout><ArticleEditor /></AppLayout></PrivateRoute>} />
-
-        {/* Admin - Categories */}
-        <Route path="/admin/categories" element={<PrivateRoute><AppLayout><CategoriesList /></AppLayout></PrivateRoute>} />
-
-        {/* Admin - Users */}
-        <Route path="/admin/users" element={<PrivateRoute><AppLayout><UsersList /></AppLayout></PrivateRoute>} />
-
-        {/* Admin - Settings */}
-        <Route path="/admin/settings/ai" element={<PrivateRoute><AppLayout><AiSettingsPage /></AppLayout></PrivateRoute>} />
-        <Route path="/admin/settings/company" element={<PrivateRoute><AppLayout><CompanySettingsPage /></AppLayout></PrivateRoute>} />
-        <Route path="/admin/settings/widget" element={<PrivateRoute><AppLayout><WidgetSettingsPage /></AppLayout></PrivateRoute>} />
-
-        {/* Admin - Knowledge Gaps */}
-        <Route path="/admin/knowledge-gaps" element={<PrivateRoute><AppLayout><KnowledgeGapsList /></AppLayout></PrivateRoute>} />
-
-        {/* Admin - Audit Logs */}
-        <Route path="/admin/audit-logs" element={<PrivateRoute><AppLayout><AuditLogsPage /></AppLayout></PrivateRoute>} />
-        <Route path="/admin/system-logs" element={<PrivateRoute><AppLayout><SystemLogsPage /></AppLayout></PrivateRoute>} />
-        <Route path="/admin/ratings" element={<PrivateRoute><AppLayout><RatingsPage /></AppLayout></PrivateRoute>} />
-        <Route path="/admin/widget-conversations" element={<PrivateRoute><AppLayout><WidgetConversationsPage /></AppLayout></PrivateRoute>} />
-        <Route path="/admin/health" element={<PrivateRoute><AppLayout><HealthPage /></AppLayout></PrivateRoute>} />
-
-        {/* Default Redirect */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </AuthProvider>
-  );
+    <TooltipProvider delayDuration={300}>
+      <RouterProvider router={router} />
+      <Toaster />
+    </TooltipProvider>
+  )
 }
 
-export default App;
+export default App

@@ -1,0 +1,131 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Conversation;
+use App\Models\WidgetSettings;
+use App\Models\Message;
+use App\Services\Teams\TeamsNotificationService;
+use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
+
+class SupportTransferService
+{
+    public function __construct(
+        private TeamsNotificationService $teams = new TeamsNotificationService(),
+    ) {}
+
+    public function tryTransfer(Conversation $conversation): array
+    {
+        $settings = WidgetSettings::current();
+        $result = [
+            'transferred' => false,
+            'reason' => null,
+            'linkOpened' => false,
+        ];
+
+        // 1) Verifica modo manutenção
+        if ($settings->maintenance_mode) {
+            $result['reason'] = 'maintenance';
+            $this->notifyTeamsIfEnabled($settings, 'maintenance', $conversation);
+            return $result;
+        }
+
+        // 2) Verifica horário de suporte
+        $now = Carbon::now();
+        $start = $settings->support_start_time ? Carbon::createFromFormat('H:i', $settings->support_start_time) : null;
+        $end = $settings->support_end_time ? Carbon::createFromFormat('H:i', $settings->support_end_time) : null;
+
+        if ($start && $end && !$this->isWithinHours($now, $start, $end)) {
+            $result['reason'] = 'out_of_hours';
+            $this->notifyTeamsIfEnabled($settings, 'out_of_hours', $conversation);
+            return $result;
+        }
+
+        // 3) Gera resumo via IA (best-effort, não-bloqueante)
+        $summary = $this->generateSummary($conversation);
+
+        // 4) Fecha e marca como transferida
+        $conversation->update([
+            'is_closed' => true,
+            'closed_at' => now(),
+            'transfer_status' => 'transferred',
+        ]);
+
+        // 5) Constrói link de suporte com placeholders substituídos
+        $link = $this->buildSupportLink($settings, $conversation);
+
+        // 6) Notifica Teams
+        $this->teams->sendTransfer(
+            (string) $conversation->id,
+            $conversation->user_name ?? 'Anônimo',
+            $summary
+        );
+
+        $result['transferred'] = true;
+        $result['link'] = $link;
+        $result['summary'] = $summary;
+
+        return $result;
+    }
+
+    public function isWithinHours(Carbon $now, Carbon $start, Carbon $end): bool
+    {
+        $current = $now->format('H:i');
+        if ($start->lt($end)) {
+            return $current >= $start->format('H:i') && $current <= $end->format('H:i');
+        }
+        // Overnight range (e.g. 22:00–06:00)
+        return $current >= $start->format('H:i') || $current <= $end->format('H:i');
+    }
+
+    private function buildSupportLink(WidgetSettings $settings, Conversation $conversation): ?string
+    {
+        $link = $settings->support_link;
+        if (!$link) return null;
+
+        $name = $conversation->user_name ?? '';
+        $email = $conversation->user?->email ?? '';
+
+        return str_replace(
+            ['{NOME}', '{EMAIL}'],
+            [urlencode($name), urlencode($email)],
+            $link
+        );
+    }
+
+    private function generateSummary(Conversation $conversation): string
+    {
+        $messages = Message::where('conversation_id', $conversation->id)
+            ->orderBy('created_at')
+            ->limit(20)
+            ->get();
+
+        if ($messages->isEmpty()) {
+            return 'Sem mensagens na conversa.';
+        }
+
+        // Concatena últimas mensagens do usuário como resumo (best-effort, sem chamada de IA para não bloquear)
+        $userMessages = $messages->where('role', 'user')->pluck('content')->toArray();
+        $text = implode(' | ', array_slice($userMessages, -5));
+
+        return mb_substr($text, 0, 300);
+    }
+
+    private function notifyTeamsIfEnabled(WidgetSettings $settings, string $type, Conversation $conversation): void
+    {
+        $enabled = match ($type) {
+            'out_of_hours' => $settings->teams_notify_out_of_hours,
+            'maintenance' => true,
+            default => true,
+        };
+
+        if (!$enabled) return;
+
+        $message = $conversation->messages()->latest()->first()?->content ?? '';
+        $this->teams->{'send' . ucfirst($type)}(
+            $conversation->user_name ?? 'Anônimo',
+            $message
+        );
+    }
+}

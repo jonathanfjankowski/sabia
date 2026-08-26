@@ -7,14 +7,20 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ArticleVersion extends Model
 {
+    public $timestamps = false;
+
+    protected $table = 'article_versions';
+
     protected $fillable = [
         'article_id',
         'version',
-        'title',
-        'summary',
         'content',
-        'changelog',
         'edited_by',
+    ];
+
+    protected $casts = [
+        'version' => 'integer',
+        'created_at' => 'datetime',
     ];
 
     public function article(): BelongsTo
@@ -22,8 +28,8 @@ class ArticleVersion extends Model
         return $this->belongsTo(Article::class);
     }
 
-    public function editor(): BelongsTo
+    public function editedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'edited_by');
+        return $this->belongsTo(Profile::class, 'edited_by');
     }
 }

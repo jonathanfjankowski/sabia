@@ -2,184 +2,107 @@
 
 namespace App\Services;
 
-use App\Models\ArticleChunk;
-use Illuminate\Support\Collection;
+use App\Models\AiSettings;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Busca vetorial nativa via pgvector (cosine similarity).
+ *
+ * Substitui o loop PHP em ChatController/PublicWidgetController que
+ * carregava 100 chunks e computava cosseno em memória — lento e não escala.
+ *
+ * Usa operador `<=>` do pgvector (cosine distance) + filtros RLS
+ * via current_role (sabia_internal / sabia_widget / sabia_bypass).
+ */
 class VectorSearchService
 {
-    protected EmbeddingService $embeddingService;
-    protected int $topN = 5;
-
-    public function __construct(EmbeddingService $embeddingService)
-    {
-        $this->embeddingService = $embeddingService;
+    public function __construct(
+        private ?AiSettings $settings = null,
+    ) {
+        $this->settings ??= AiSettings::current();
     }
 
     /**
-     * Busca semântica na base de conhecimento
-     * Usa similaridade coseno entre embeddings dos chunks
+     * Busca chunks relevantes para um embedding.
      *
-     * @param string $query Texto da busca
-     * @param int|null $topN Número de resultados
-     * @param string|null $accessLevel Filtro de acesso (public/internal)
-     * @return Collection
+     * @param  array<float>  $embedding  Vetor 768 dims
+     * @param  int  $topN  Quantidade (default: ai_settings.rag_top_n)
+     * @param  string  $accessLevel  'internal' ou 'public' — filtra articles.access_level
+     *
+     * @return array<int, array{id: int, content: string, article_id: int, similarity: float}>
      */
-    public function search(string $query, ?int $topN = null, ?string $accessLevel = null): Collection
+    public function search(array $embedding, int $topN = null, string $accessLevel = 'internal'): array
     {
-        $topN = $topN ?? $this->topN;
+        $topN = $topN ?? (int) $this->settings->rag_top_n;
+        $vector = '[' . implode(',', $embedding) . ']';
 
-        // 1. Gerar embedding da query
-        $queryEmbedding = $this->embeddingService->generateEmbedding($query);
+        // RLS já garante isolamento (sabia_internal vê internal+public ativos; sabia_widget vê só public ativos)
+        // accessLevel serve como filtro extra para clareza de intenção.
+        $accessFilter = $accessLevel === 'public' ? "AND a.access_level = 'public'" : '';
 
-        // 2. Buscar chunks com similaridade coseno (em memória para desenvolvimento)
-        // Em produção com PostgreSQL + pgvector, usar:
-        // DB::select("
-        //   SELECT ac.*, a.title as article_title, a.slug as article_slug,
-        //          1 - (ac.embedding <=> ?) as similarity
-        //   FROM article_chunks ac
-        //   JOIN articles a ON a.id = ac.article_id AND a.deleted_at IS NULL
-        //   WHERE a.is_published = true
-        //   ORDER BY ac.embedding <=> ?
-        //   LIMIT ?
-        // ", [json_encode($queryEmbedding), json_encode($queryEmbedding), $topN]);
+        $sql = <<<SQL
+            SELECT
+                ac.id,
+                ac.content,
+                ac.article_id,
+                1 - (ac.embedding <=> ?::vector) AS similarity
+            FROM article_chunks ac
+            JOIN articles a ON a.id = ac.article_id
+            WHERE a.status = 'active'
+              {$accessFilter}
+            ORDER BY ac.embedding <=> ?::vector
+            LIMIT ?
+        SQL;
 
-        $chunks = ArticleChunk::whereHas('article', function ($q) use ($accessLevel) {
-                $q->where('is_published', true)
-                  ->whereNull('deleted_at');
-
-                if ($accessLevel) {
-                    // Nota: access_level será implementado quando a coluna for adicionada
-                }
-            })
-            ->with('article:id,title,slug,summary')
-            ->get();
-
-        // 3. Calcular similaridade em memória
-        $scored = $chunks->map(function ($chunk) use ($queryEmbedding, $query) {
-            $embedding = $chunk->embedding ?? [];
-
-            if (!empty($embedding)) {
-                $similarity = EmbeddingService::cosineSimilarity($queryEmbedding, $embedding);
-            } else {
-                // Fallback: similaridade textual
-                $similarity = $this->textSimilarity($query, $chunk->content);
-            }
-
-            return [
-                'chunk_id' => $chunk->id,
-                'article_id' => $chunk->article_id,
-                'article_title' => $chunk->article->title ?? '',
-                'article_slug' => $chunk->article->slug ?? '',
-                'content' => $this->truncate($chunk->content, 300),
-                'similarity' => round(max(0, $similarity), 4),
-                'chunk_index' => $chunk->chunk_index,
-            ];
-        });
-
-        // 4. Ordenar e limitar
-        return $scored->sortByDesc('similarity')
-            ->filter(fn($item) => $item['similarity'] > 0.1)
-            ->take($topN)
-            ->values();
+        try {
+            $rows = DB::select($sql, [$vector, $vector, $topN]);
+            return array_map(fn ($r) => [
+                'id' => $r->id,
+                'content' => $r->content,
+                'article_id' => $r->article_id,
+                'similarity' => (float) $r->similarity,
+            ], $rows);
+        } catch (\Throwable $e) {
+            app(\App\Services\SystemLogService::class)->log(
+                'error', 'vector_search', 'Falha na busca vetorial',
+                ['error' => $e->getMessage(), 'topN' => $topN, 'accessLevel' => $accessLevel]
+            );
+            return [];
+        }
     }
 
     /**
-     * Busca textual (keyword matching) como fallback
+     * Estima confiança baseada no top-N score.
+     * Reutiliza os mesmos chunks da busca (evita query extra).
      */
-    public function textSearch(string $query, int $topN = 10): Collection
+    public function estimateConfidence(array $results, float $threshold): string
     {
-        $terms = explode(' ', $query);
-        $terms = array_filter($terms, fn($t) => mb_strlen($t) > 2);
+        if (empty($results)) {
+            return 'none';
+        }
 
-        $chunks = ArticleChunk::whereHas('article', function ($q) {
-                $q->where('is_published', true)->whereNull('deleted_at');
-            })
-            ->with('article:id,title,slug,summary')
-            ->get();
+        $topScore = $results[0]['similarity'] ?? 0.0;
 
-        $scored = $chunks->map(function ($chunk) use ($terms, $query) {
-            $score = 0;
-            $content = mb_strtolower($chunk->content);
-            $title = mb_strtolower($chunk->article->title ?? '');
-
-            foreach ($terms as $term) {
-                $term = mb_strtolower($term);
-                $contentCount = mb_substr_count($content, $term);
-                $titleCount = mb_substr_count($title, $term);
-
-                $score += $contentCount * 0.5 + $titleCount * 2;
-            }
-
-            $score += $this->textSimilarity($query, $chunk->content) * 2;
-
-            return [
-                'chunk_id' => $chunk->id,
-                'article_id' => $chunk->article_id,
-                'article_title' => $chunk->article->title ?? '',
-                'article_slug' => $chunk->article->slug ?? '',
-                'content' => $this->truncate($chunk->content, 300),
-                'similarity' => round(min(1, $score / 10), 4),
-                'chunk_index' => $chunk->chunk_index,
-            ];
-        });
-
-        return $scored->sortByDesc('similarity')
-            ->filter(fn($item) => $item['similarity'] > 0.1)
-            ->take($topN)
-            ->values();
+        if ($topScore >= $threshold) {
+            return 'high';
+        }
+        if ($topScore >= $threshold * 0.6) {
+            return 'low';
+        }
+        return 'none';
     }
 
     /**
-     * Similaridade textual simples (baseada em palavras compartilhadas)
+     * Formata chunks para injeção no system prompt.
      */
-    protected function textSimilarity(string $query, string $text): float
+    public function formatContext(array $results): string
     {
-        $queryWords = array_unique(
-            array_filter(
-                preg_split('/\W+/u', mb_strtolower($query)),
-                fn($w) => mb_strlen($w) > 2
-            )
-        );
-
-        $textWords = array_unique(
-            array_filter(
-                preg_split('/\W+/u', mb_strtolower($text)),
-                fn($w) => mb_strlen($w) > 2
-            )
-        );
-
-        if (empty($queryWords) || empty($textWords)) {
-            return 0;
+        if (empty($results)) {
+            return '(Sem artigos relevantes na base de conhecimento.)';
         }
 
-        $intersection = array_intersect($queryWords, $textWords);
-        $union = array_unique(array_merge($queryWords, $textWords));
-
-        return count($intersection) / count($union);
-    }
-
-    /**
-     * Trunca texto mantendo palavras completas
-     */
-    protected function truncate(string $text, int $maxLength): string
-    {
-        if (mb_strlen($text) <= $maxLength) {
-            return $text;
-        }
-
-        $truncated = mb_substr($text, 0, $maxLength);
-        $lastSpace = mb_strrpos($truncated, ' ');
-
-        if ($lastSpace !== false) {
-            $truncated = mb_substr($truncated, 0, $lastSpace);
-        }
-
-        return $truncated . '...';
-    }
-
-    public function setTopN(int $n): void
-    {
-        $this->topN = max(1, min(50, $n));
+        return collect($results)
+            ->map(fn ($r) => "[relevância: " . round($r['similarity'], 3) . "]\n" . $r['content'])
+            ->implode("\n\n---\n\n");
     }
 }
