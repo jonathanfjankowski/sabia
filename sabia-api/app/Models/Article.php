@@ -2,13 +2,19 @@
 
 namespace App\Models;
 
+use Database\Factories\ArticleFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
 class Article extends Model
 {
+    /** @use HasFactory<ArticleFactory> */
+    use HasFactory, SoftDeletes;
+
     protected $fillable = [
         'title',
         'slug',
@@ -35,7 +41,7 @@ class Article extends Model
     {
         static::creating(function (Article $article) {
             if (empty($article->slug)) {
-                $article->slug = Str::slug($article->title) . '-' . Str::random(6);
+                $article->slug = Str::slug($article->title).'-'.Str::random(6);
             }
         });
     }

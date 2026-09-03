@@ -24,11 +24,43 @@ class BrandSettings extends Model
 
     public static function current(): self
     {
-        return static::first() ?? static::create([
-            'app_name' => 'Sabiá',
-            'primary_color' => '#6366f1',
-            'secondary_color' => '#4f46e5',
-            'font' => 'Inter',
-        ]);
+        $key = 'brand_settings.current';
+
+        // Atributos brutos no cache (modelo serializado vira
+        // __PHP_Incomplete_Class com allowed_classes=false)
+        if (is_array($cached = cache()->get($key))) {
+            // setRawAttributes pula os casts no set
+            return (new static)->setRawAttributes($cached, true);
+        }
+
+        $settings = static::query()->first();
+
+        if (! $settings) {
+            try {
+                $settings = static::create([
+                    'app_name' => 'Sabiá',
+                    'primary_color' => '#6366f1',
+                    'secondary_color' => '#4f46e5',
+                    'font' => 'Inter',
+                ]);
+            } catch (\Throwable) {
+                // Role sabia_widget só tem SELECT — defaults em memória
+                $settings = (new static)->forceFill([
+                    'app_name' => 'Sabiá',
+                    'primary_color' => '#6366f1',
+                    'secondary_color' => '#4f46e5',
+                    'font' => 'Inter',
+                ]);
+            }
+        }
+
+        cache()->put($key, $settings->getAttributes(), now()->addMinutes(5));
+
+        return $settings;
+    }
+
+    public static function clearCache(): void
+    {
+        cache()->forget('brand_settings.current');
     }
 }

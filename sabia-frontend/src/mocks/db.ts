@@ -452,7 +452,7 @@ X-Bsoft-Signature: sha256=...
 
   widget_settings: {
     welcome_message: 'Olá! 👋 Sou o **Sabiá**, seu assistente de suporte. Como posso ajudar?',
-    support_link: 'https://suporte.bsoft.com.br/abrir?nome={NOME}&email={EMAIL}',
+    support_link: '',
     support_start_time: '08:00',
     support_end_time: '18:00',
     support_phone: '+55 (41) 4000-1000',
@@ -480,7 +480,10 @@ X-Bsoft-Signature: sha256=...
     api_key: '••••••••••••••••',
     model: 'gemini-2.0-flash',
     endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    embedding_model: 'text-embedding-004',
+    embedding_provider: 'sidecar' as const,
+    embedding_model: 'BAAI/bge-m3',
+    embedding_sidecar_connected: true,
+    embedding_sidecar_url: 'http://embedding-sidecar:8000',
     temperature: 0.3,
     max_tokens: 2048,
     system_prompt: `Você é um assistente de suporte do sistema. Responda APENAS perguntas

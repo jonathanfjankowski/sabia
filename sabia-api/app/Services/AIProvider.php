@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AiSettings;
 use Generator;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -29,12 +30,12 @@ class AIProvider
     /**
      * Stream de chat completion. Retorna chunks de texto incrementais.
      *
-     * @param array<int, array{role: string, content: string}> $history
+     * @param  array<int, array{role: string, content: string}>  $history
      * @return Generator<int, string>
      */
     public function chat(string $message, string $systemPrompt, array $history = []): Generator
     {
-        $endpoint = rtrim($this->settings->endpoint ?? '', '/') . '/chat/completions';
+        $endpoint = rtrim($this->settings->endpoint ?? '', '/').'/chat/completions';
 
         $messages = array_merge(
             [['role' => 'system', 'content' => $systemPrompt]],
@@ -53,7 +54,7 @@ class AIProvider
                 'stream' => true,
             ]);
 
-        if (!$response->ok()) {
+        if (! $response->ok()) {
             $body = $response->body();
             app(SystemLogService::class)->log(
                 'error',
@@ -62,6 +63,7 @@ class AIProvider
                 ['body' => substr($body, 0, 1000)]
             );
             yield "[erro: provedor IA retornou {$response->status()}]";
+
             return;
         }
 
@@ -78,13 +80,13 @@ class AIProvider
     /**
      * Stream de chat com análise de imagens.
      *
-     * @param array<int, string> $images data URIs base64
-     * @param array<int, array{role: string, content: string}> $history
+     * @param  array<int, string>  $images  data URIs base64
+     * @param  array<int, array{role: string, content: string}>  $history
      * @return Generator<int, string>
      */
     public function analyzeImages(string $message, array $images, string $systemPrompt, array $history = []): Generator
     {
-        $endpoint = rtrim($this->settings->endpoint ?? '', '/') . '/chat/completions';
+        $endpoint = rtrim($this->settings->endpoint ?? '', '/').'/chat/completions';
 
         $content = array_merge(
             [['type' => 'text', 'text' => $message]],
@@ -111,7 +113,7 @@ class AIProvider
                 'stream' => true,
             ]);
 
-        if (!$response->ok()) {
+        if (! $response->ok()) {
             $body = $response->body();
             app(SystemLogService::class)->log(
                 'error',
@@ -120,6 +122,7 @@ class AIProvider
                 ['body' => substr($body, 0, 1000)]
             );
             yield "[erro: provedor IA retornou {$response->status()}]";
+
             return;
         }
 
@@ -136,24 +139,50 @@ class AIProvider
     /** Gera vetor de embedding para um texto. */
     public function embed(string $text): array
     {
-        $endpoint = rtrim($this->settings->endpoint ?? '', '/') . '/embeddings';
+        // Sidecar primeiro (provedor padrão). Fallback para o endpoint de
+        // chat se o sidecar estiver fora — mantém compat com instalações
+        // pré-sidecar.
+        if (($this->settings->embedding_provider ?? null) === 'sidecar') {
+            $vector = app(EmbeddingService::class)->embed($text);
+            if (! empty($vector)) {
+                return $vector;
+            }
+        }
+
+        // Provedor de embeddings dedicado (se configurado). Fallback:
+        // reusa endpoint + api_key do provedor de chat — mantém compat com
+        // quem só tem um provedor único.
+        $endpoint = rtrim($this->settings->embedding_endpoint ?? $this->settings->endpoint ?? '', '/').'/embeddings';
+        $apiKey = $this->settings->embedding_api_key ?? $this->settings->api_key;
         $model = $this->settings->embedding_model ?: $this->settings->model;
 
-        $response = $this->http()
-            ->timeout(120)
-            ->withOptions(['connect_timeout' => 30]) 
-            ->post($endpoint, [
-                'model' => $model,
-                'input' => $text,
-            ]);
+        try {
+            $response = $this->httpWithKey($apiKey)
+                ->timeout(30)
+                ->withOptions(['connect_timeout' => 5])
+                ->post($endpoint, [
+                    'model' => $model,
+                    'input' => $text,
+                ]);
+        } catch (ConnectionException $e) {
+            app(SystemLogService::class)->log(
+                'error',
+                'ai.embed',
+                'Embeddings endpoint unreachable: '.$e->getMessage(),
+                ['endpoint' => $endpoint, 'model' => $model]
+            );
 
-        if (!$response->ok()) {
+            return [];
+        }
+
+        if (! $response->ok()) {
             app(SystemLogService::class)->log(
                 'error',
                 'ai.embed',
                 "Embeddings endpoint returned {$response->status()}",
                 ['body' => substr($response->body(), 0, 1000)]
             );
+
             return [];
         }
 
@@ -164,32 +193,44 @@ class AIProvider
     public function summarize(string $text): string
     {
         $text = trim($text);
-        if ($text === '') return '';
+        if ($text === '') {
+            return '';
+        }
 
-        $prompt = "Resuma o seguinte texto em até 2 frases em pt-BR:\n\n" . $text;
+        $prompt = "Resuma o seguinte texto em até 2 frases em pt-BR:\n\n".$text;
         $out = '';
         foreach ($this->chat($prompt, 'Você é um resumidor conciso.') as $chunk) {
             $out .= $chunk;
         }
+
         return $out;
     }
 
     private function http()
     {
-        return Http::withToken($this->settings->api_key)
+        return $this->httpWithKey($this->settings->api_key);
+    }
+
+    private function httpWithKey(?string $key)
+    {
+        return Http::withToken($key ?? '')
             ->withHeaders([
                 'Accept' => 'application/json',
                 'Content-Type' => 'application/json',
             ]);
     }
 
-    private function parseSse(string $body): \Generator
+    private function parseSse(string $body): Generator
     {
         return (function () use ($body) {
             foreach (preg_split('/\R\R/', $body) as $chunk) {
-                if (!str_starts_with($chunk, 'data:')) continue;
+                if (! str_starts_with($chunk, 'data:')) {
+                    continue;
+                }
                 $json = trim(substr($chunk, 5));
-                if ($json === '[DONE]' || $json === '') continue;
+                if ($json === '[DONE]' || $json === '') {
+                    continue;
+                }
                 $decoded = json_decode($json, true);
                 if (is_array($decoded)) {
                     yield $decoded;

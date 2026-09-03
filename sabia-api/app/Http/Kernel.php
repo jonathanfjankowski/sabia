@@ -2,7 +2,24 @@
 
 namespace App\Http;
 
+use App\Http\Middleware\CheckAccessLevel;
+use App\Http\Middleware\CheckRole;
+use App\Http\Middleware\CheckWidgetOrigin;
+use App\Http\Middleware\RedirectIfAuthenticated;
+use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\SetRlsContext;
+use Illuminate\Auth\Middleware\Authenticate;
+use Illuminate\Auth\Middleware\AuthenticateWithBasicAuth;
+use Illuminate\Auth\Middleware\Authorize;
+use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
+use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Foundation\Http\Kernel as HttpKernel;
+use Illuminate\Http\Middleware\SetCacheHeaders;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Routing\Middleware\ValidateSignature;
+use Illuminate\Session\Middleware\AuthenticateSession;
+use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
 class Kernel extends HttpKernel
 {
@@ -12,35 +29,35 @@ class Kernel extends HttpKernel
 
     protected $middlewareGroups = [
         'web' => [
-            \Illuminate\Routing\Middleware\SubstituteBindings::class,
-            \App\Http\Middleware\SecurityHeaders::class,
+            SubstituteBindings::class,
+            SecurityHeaders::class,
         ],
 
         'api' => [
-            \Illuminate\Routing\Middleware\SubstituteBindings::class,
-            \Illuminate\Routing\Middleware\ThrottleRequests::class.':api',
-            \Illuminate\Routing\Middleware\ValidateSignature::class,
-            \App\Http\Middleware\SecurityHeaders::class,
+            SubstituteBindings::class,
+            ThrottleRequests::class.':api',
+            ValidateSignature::class,
+            SecurityHeaders::class,
         ],
     ];
 
     protected $routeMiddleware = [
-        'auth' => \Illuminate\Auth\Middleware\Authenticate::class,
-        'auth.basic' => \Illuminate\Auth\Middleware\AuthenticateWithBasicAuth::class,
-        'auth.session' => \Illuminate\Session\Middleware\AuthenticateSession::class,
-        'cache.headers' => \Illuminate\Http\Middleware\SetCacheHeaders::class,
-        'can' => \Illuminate\Auth\Middleware\Authorize::class,
-        'guest' => \App\Http\Middleware\RedirectIfAuthenticated::class, // not used but referenced by auth scaffold
-        'password.confirm' => \Illuminate\Auth\Middleware\RequirePassword::class,
-        'signed' => \Illuminate\Routing\Middleware\ValidateSignature::class,
-        'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
-        'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
+        'auth' => Authenticate::class,
+        'auth.basic' => AuthenticateWithBasicAuth::class,
+        'auth.session' => AuthenticateSession::class,
+        'cache.headers' => SetCacheHeaders::class,
+        'can' => Authorize::class,
+        'guest' => RedirectIfAuthenticated::class, // not used but referenced by auth scaffold
+        'password.confirm' => RequirePassword::class,
+        'signed' => ValidateSignature::class,
+        'throttle' => ThrottleRequests::class,
+        'verified' => EnsureEmailIsVerified::class,
 
         // Custom
-        'role' => \App\Http\Middleware\CheckRole::class,
-        'access' => \App\Http\Middleware\CheckAccessLevel::class,
-        'rls' => \App\Http\Middleware\SetRlsContext::class,
-        'widget.origin' => \App\Http\Middleware\CheckWidgetOrigin::class,
-        'sanctum' => \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+        'role' => CheckRole::class,
+        'access' => CheckAccessLevel::class,
+        'rls' => SetRlsContext::class,
+        'widget.origin' => CheckWidgetOrigin::class,
+        'sanctum' => EnsureFrontendRequestsAreStateful::class,
     ];
 }

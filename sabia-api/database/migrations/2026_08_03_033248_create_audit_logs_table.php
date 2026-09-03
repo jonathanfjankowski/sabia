@@ -13,9 +13,9 @@ return new class extends Migration
     {
         Schema::create('audit_logs', function (Blueprint $table) {
             $table->id();
-            
+
             $table->foreignUuid('user_id')->nullable()->constrained('users')->onDelete('set null');
-            
+
             $table->string('action');
             $table->string('entity_type')->nullable();
             $table->string('entity_id')->nullable();
@@ -25,7 +25,7 @@ return new class extends Migration
             $table->text('user_agent')->nullable();
             $table->timestampsTz();
         });
-        
+
         // Add indexes
         Schema::table('audit_logs', function (Blueprint $table) {
             $table->index('user_id');

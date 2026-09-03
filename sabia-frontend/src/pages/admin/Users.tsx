@@ -41,16 +41,23 @@ import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/stores/toast'
 import { initials, formatDateTime } from '@/lib/utils'
+import { useApiError } from '@/hooks/useApiError'
+import { useNavigate } from 'react-router-dom'
 
 export function Users() {
   const [users, setUsers] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<Profile | null>(null)
   const [creating, setCreating] = useState(false)
+  const { handleError } = useApiError()
+  const navigate = useNavigate()
 
   const load = () => {
     setLoading(true)
-    api.get<Profile[]>('/admin/users').then(setUsers).finally(() => setLoading(false))
+    api.get<Profile[]>('/admin/users')
+      .then(setUsers)
+      .catch((err) => handleError(err, 'Erro ao carregar usuários'))
+      .finally(() => setLoading(false))
   }
 
   useEffect(load, [])
@@ -60,8 +67,8 @@ export function Users() {
       await api.put(`/admin/users/${u.id}`, { is_active: !u.is_active })
       toast.success(u.is_active ? 'Usuário desativado' : 'Usuário ativado')
       load()
-    } catch {
-      toast.error('Erro')
+    } catch (err) {
+      handleError(err, 'Erro ao alterar status do usuário')
     }
   }
 
@@ -199,6 +206,7 @@ function UserDialog({
   const [role, setRole] = useState<Role>('operador')
   const [isActive, setIsActive] = useState(true)
   const [saving, setSaving] = useState(false)
+  const { handleError } = useApiError()
 
   useEffect(() => {
     if (user) {
@@ -230,8 +238,8 @@ function UserDialog({
         toast.success('Usuário criado')
       }
       onSaved()
-    } catch {
-      toast.error('Erro ao salvar')
+    } catch (err) {
+      handleError(err, user ? 'Erro ao atualizar usuário' : 'Erro ao criar usuário')
     } finally {
       setSaving(false)
     }

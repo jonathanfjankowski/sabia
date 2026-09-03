@@ -22,12 +22,12 @@ return new class extends Migration
             $table->foreignUuid('updated_by')->nullable()->constrained('profiles')->onDelete('set null');
             $table->timestampsTz();
         });
-        
+
         // Add indexes
         Schema::table('brand_settings', function (Blueprint $table) {
             $table->index('updated_by');
         });
-        
+
         // Insert default record
         DB::table('brand_settings')->insert([
             'app_name' => 'Sabiá',

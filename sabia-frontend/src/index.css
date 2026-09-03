@@ -111,6 +111,14 @@
     font-feature-settings: 'cv11', 'ss01', 'ss03';
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    cursor: default;
+  }
+
+  /* Forçar cursor padrão do Windows em todos os elementos */
+  button, a, input, select, textarea, [role="button"],
+  input[type="text"], input[type="email"], input[type="password"], input[type="search"],
+  input[type="url"], [contenteditable="true"] {
+    cursor: default;
   }
 
   ::selection {

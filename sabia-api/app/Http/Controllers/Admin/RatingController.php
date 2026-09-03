@@ -11,13 +11,14 @@ class RatingController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Conversation::whereNotNull('rating')->latest();
+        // with('user') evita N+1: o map abaixo acessa $c->user por linha
+        $query = Conversation::with('user')->whereNotNull('rating')->latest();
 
         if ($source = $request->query('source')) {
             $query->where('source', $source);
         }
 
-        $ratings = $query->get()->map(fn ($c) => [
+        $ratings = $query->limit(min(max((int) $request->query('limit', 200), 1), 500))->get()->map(fn ($c) => [
             'id' => $c->id,
             'conversation_id' => $c->id,
             'user_name' => $c->user?->full_name ?? 'Anônimo',

@@ -79,7 +79,8 @@ class AuthTest extends TestCase
         ]);
 
         $response->assertStatus(422)
-            ->assertJson(['message' => 'Usuário inativo.']);
+            // Mensagem unificada: não revelar que a conta existe mas está inativa
+            ->assertJson(['message' => 'Credenciais inválidas.']);
     }
 
     public function test_login_throttle_blocks_after_5_attempts(): void
@@ -128,13 +129,17 @@ class AuthTest extends TestCase
 
         $token = $user->createToken('test', ['gestor'])->plainTextToken;
 
-        $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->postJson('/api/auth/logout')
             ->assertOk()
             ->assertJson(['message' => 'Logout realizado']);
 
+        // No mesmo processo de teste o guard Sanctum memoiza o usuário da
+        // request anterior; sem forgetGuards o /me nem consultaria o banco
+        $this->app->make('auth')->forgetGuards();
+
         // Token should be invalidated
-        $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->getJson('/api/auth/me')
             ->assertStatus(401);
     }
@@ -154,7 +159,7 @@ class AuthTest extends TestCase
 
         $token = $user->createToken('test', ['gestor'])->plainTextToken;
 
-        $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->getJson('/api/auth/me')
             ->assertOk()
             ->assertJsonStructure([

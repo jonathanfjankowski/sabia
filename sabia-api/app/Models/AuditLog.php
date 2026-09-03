@@ -66,6 +66,7 @@ class AuditLog extends Model
         if ($to) {
             $query->where('created_at', '<=', $to);
         }
+
         return $query;
     }
 }

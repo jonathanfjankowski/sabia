@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Article;
-use App\Models\ArticleChunk;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Profile;
@@ -31,7 +30,7 @@ class RLSTest extends TestCase
         $internal = Article::factory()->create(['access_level' => 'internal', 'status' => 'active']);
         $public = Article::factory()->create(['access_level' => 'public', 'status' => 'active']);
 
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->getJson('/api/articles');
 
         $response->assertOk();
@@ -49,7 +48,7 @@ class RLSTest extends TestCase
         $internal = Article::factory()->create(['access_level' => 'internal', 'status' => 'active']);
         $public = Article::factory()->create(['access_level' => 'public', 'status' => 'active']);
 
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->getJson('/api/articles');
 
         $response->assertOk();
@@ -70,7 +69,7 @@ class RLSTest extends TestCase
         $conv1 = Conversation::factory()->create(['user_id' => $profile1->id, 'source' => 'direct']);
         $conv2 = Conversation::factory()->create(['user_id' => $profile2->id, 'source' => 'direct']);
 
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token1])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$token1])
             ->getJson('/api/conversations');
 
         $response->assertOk();
@@ -79,7 +78,7 @@ class RLSTest extends TestCase
         $this->assertNotContains($conv2->id, $ids);
     }
 
-    public function test_widget_session_only_sees_own_conversation(): void
+    public function test_widget_session_only_manages_own_conversation(): void
     {
         $user = User::factory()->create(['email' => 'widget@test.com', 'password' => Hash::make('pass')]);
         Profile::factory()->create(['user_id' => $user->id, 'role' => 'operador', 'is_active' => true]);
@@ -88,13 +87,19 @@ class RLSTest extends TestCase
         $conv1 = Conversation::factory()->create(['session_id' => 'sess-1', 'source' => 'widget']);
         $conv2 = Conversation::factory()->create(['session_id' => 'sess-2', 'source' => 'widget']);
 
-        $response = $this->withHeaders([
-            'Authorization' => 'Bearer ' . $token,
+        // Sessão dona fecha a própria conversa
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$token,
             'X-Session-Id' => 'sess-1',
-        ])->getJson('/api/widget/conversations');
+        ])->postJson("/api/widget/conversations/{$conv1->id}/close")
+            ->assertOk();
 
-        $response->assertOk();
-        // Widget endpoint doesn't have list, test via chat
+        // Sessão de outro visitante não enxerga nem fecha conversa alheia
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$token,
+            'X-Session-Id' => 'sess-1',
+        ])->postJson("/api/widget/conversations/{$conv2->id}/close")
+            ->assertNotFound();
     }
 
     public function test_admin_bypass_rls_sees_all_conversations(): void
@@ -112,7 +117,7 @@ class RLSTest extends TestCase
         $conv1 = Conversation::factory()->create(['user_id' => $profile1->id, 'source' => 'direct']);
         $conv2 = Conversation::factory()->create(['user_id' => $profile2->id, 'source' => 'direct']);
 
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $gestorToken])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$gestorToken])
             ->getJson('/api/admin/conversations');
 
         // Admin list endpoint - needs to be created
@@ -131,9 +136,11 @@ class RLSTest extends TestCase
         $conv2 = Conversation::factory()->create(['user_id' => $profile2->id, 'source' => 'direct']);
         Message::factory()->create(['conversation_id' => $conv2->id, 'role' => 'user', 'content' => 'secret']);
 
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token1])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$token1])
             ->getJson("/api/conversations/{$conv2->id}/messages");
 
-        $response->assertStatus(403);
+        // RLS esconde a conversa de outro operador: findOrFail devolve 404
+        // (não vaza existência); o 403 do IDOR fica para o caso RLS bypass
+        $response->assertStatus(404);
     }
 }

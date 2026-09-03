@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 class SetRlsContext
 {
@@ -13,27 +14,41 @@ class SetRlsContext
     {
         $user = $request->user();
 
-        return DB::transaction(function () use ($request, $next, $user, $defaultRole) {
-            
-            $profileId = $user?->profile?->id ?? $user?->id;
-            if ($profileId) {
-                DB::statement("SELECT set_config('app.current_user_id', ?, true)", [(string) $profileId]);
-            }
+        $profileId = $user?->profile?->id ?? $user?->id;
+        if ($profileId) {
+            // false = escopo de SESSÃO da conexão (SET LOCAL morreria com a
+            // transação antes do corpo streamado do SSE rodar)
+            DB::statement("SELECT set_config('app.current_user_id', ?, false)", [(string) $profileId]);
+        }
 
-            $sessionId = $request->input('session_id') ?? $request->headers->get('X-Session-Id');
-            if ($sessionId) {
-                DB::statement("SELECT set_config('app.current_session_id', ?, true)", [(string) $sessionId]);
-            }
+        $sessionId = $request->input('session_id') ?? $request->headers->get('X-Session-Id');
+        if ($sessionId) {
+            DB::statement("SELECT set_config('app.current_session_id', ?, false)", [(string) $sessionId]);
+        }
 
-            if ($defaultRole === 'widget' || $user?->tokenCan('widget')) {
-                DB::statement('SET LOCAL ROLE sabia_widget');
-            } elseif ($user?->profile?->isGestor()) {
-                DB::statement('SET LOCAL ROLE sabia_bypass');
-            } else {
-                DB::statement('SET LOCAL ROLE sabia_internal');
-            }
+        if ($defaultRole === 'widget' || $user?->tokenCan('widget')) {
+            DB::statement('SET ROLE sabia_widget');
+        } elseif ($user?->profile?->isGestor()) {
+            DB::statement('SET ROLE sabia_bypass');
+        } else {
+            DB::statement('SET ROLE sabia_internal');
+        }
 
-            return $next($request);
-        });
+        return $next($request);
+    }
+
+    /**
+     * Sem a transação envolvente, o papel/contexto vive na sessão da conexão:
+     * restauramos para não vazar contexto elevado para outra request caso a
+     * conexão seja reaproveitada (persistent connections / octane).
+     */
+    public function terminate(Request $request, Response $response): void
+    {
+        try {
+            DB::statement('RESET ROLE');
+            DB::statement("SELECT set_config('app.current_user_id', '', false), set_config('app.current_session_id', '', false)");
+        } catch (Throwable) {
+            // conexão já encerrada — nada a restaurar
+        }
     }
 }

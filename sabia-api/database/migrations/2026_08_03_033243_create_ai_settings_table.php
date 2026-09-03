@@ -2,9 +2,8 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -30,13 +29,13 @@ return new class extends Migration
             $table->foreignUuid('updated_by')->nullable()->constrained('profiles')->onDelete('set null');
             $table->timestampsTz();
         });
-        
+
         // Add indexes
         Schema::table('ai_settings', function (Blueprint $table) {
             $table->index('provider');
             $table->index('updated_by');
         });
-        
+
         // Insert default record
         DB::table('ai_settings')->insert([
             'provider' => 'gemini',

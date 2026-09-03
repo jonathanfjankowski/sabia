@@ -2,8 +2,8 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -14,7 +14,7 @@ return new class extends Migration
     {
         // Enable pgvector extension if not already enabled
         DB::statement('CREATE EXTENSION IF NOT EXISTS vector');
-        
+
         Schema::create('article_chunks', function (Blueprint $table) {
             $table->id(); // SERIAL PRIMARY KEY
             $table->foreignId('article_id')->constrained()->onDelete('cascade');
@@ -24,14 +24,14 @@ return new class extends Migration
             $table->json('keywords')->nullable(); // TEXT[] in PostgreSQL maps to JSON in Laravel
             $table->timestampsTz();
         });
-        
+
         // Create HNSW index for vector similarity search
-        DB::statement("
+        DB::statement('
             CREATE INDEX idx_chunks_embedding ON article_chunks 
             USING hnsw (embedding vector_cosine_ops) 
             WITH (m = 16, ef_construction = 200)
-        ");
-        
+        ');
+
         // Additional indexes
         Schema::table('article_chunks', function (Blueprint $table) {
             $table->index('article_id');

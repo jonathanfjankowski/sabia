@@ -13,7 +13,10 @@ class AiSettings extends Model
         'endpoint',
         'api_key',
         'model',
+        'embedding_provider',
         'embedding_model',
+        'embedding_endpoint',
+        'embedding_api_key',
         'temperature',
         'max_tokens',
         'system_prompt',
@@ -33,6 +36,7 @@ class AiSettings extends Model
         'rag_top_n' => 'integer',
         'confidence_threshold' => 'float',
         'api_key' => Encryptable::class,
+        'embedding_api_key' => Encryptable::class,
     ];
 
     public function updatedBy(): BelongsTo
@@ -42,11 +46,46 @@ class AiSettings extends Model
 
     public static function current(): self
     {
-        return static::first() ?? static::create([
-            'provider' => 'openai',
-            'endpoint' => 'https://api.openai.com/v1',
-            'model' => 'gpt-4o',
-            'embedding_model' => 'text-embedding-3-small',
-        ]);
+        $key = 'ai_settings.current';
+
+        // Cache guarda atributos brutos, não o modelo: com o hardening do
+        // Laravel (unserialize com allowed_classes=false) modelo serializado
+        // volta como __PHP_Incomplete_Class. Bruto também mantém a api_key
+        // cifrada no cache — o cast descriptografa só no acesso.
+        if (is_array($cached = cache()->get($key))) {
+            // setRawAttributes pula os casts no set: re-aplicá-los duplicaria
+            // o encode (array) e re-criptografaria (Encryptable) os valores
+            return (new static)->setRawAttributes($cached, true);
+        }
+
+        $settings = static::query()->first();
+
+        if (! $settings) {
+            try {
+                $settings = static::create([
+                    'provider' => 'openai',
+                    'endpoint' => 'https://api.openai.com/v1',
+                    'model' => 'gpt-4o',
+                    'embedding_model' => 'text-embedding-3-small',
+                ]);
+            } catch (\Throwable) {
+                // Role RLS sem INSERT em ai_settings — defaults em memória
+                $settings = (new static)->forceFill([
+                    'provider' => 'openai',
+                    'endpoint' => 'https://api.openai.com/v1',
+                    'model' => 'gpt-4o',
+                    'embedding_model' => 'text-embedding-3-small',
+                ]);
+            }
+        }
+
+        cache()->put($key, $settings->getAttributes(), now()->addMinutes(5));
+
+        return $settings;
+    }
+
+    public static function clearCache(): void
+    {
+        cache()->forget('ai_settings.current');
     }
 }

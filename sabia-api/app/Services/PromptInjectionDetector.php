@@ -2,8 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\SystemLog;
-
 class PromptInjectionDetector
 {
     private array $patterns = [
@@ -24,6 +22,7 @@ class PromptInjectionDetector
                 return true;
             }
         }
+
         return false;
     }
 }

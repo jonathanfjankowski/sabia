@@ -11,8 +11,9 @@ import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import Blockquote from '@tiptap/extension-blockquote'
 import HorizontalRule from '@tiptap/extension-horizontal-rule'
 import Placeholder from '@tiptap/extension-placeholder'
+import { Markdown } from 'tiptap-markdown'
 import TurndownService from 'turndown'
-import gfm from 'turndown-plugin-gfm'
+import * as gfm from 'turndown-plugin-gfm'
 import { createLowlight, common } from 'lowlight'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -46,7 +47,7 @@ const turndown = new (TurndownService as any)({
   codeBlockStyle: 'fenced',
   hr: '---',
 })
-turndown.use(gfm)
+turndown.use((gfm as any).gfm)
 
 // Manter sincronizado com MarkdownRenderer.tsx para que o editor e a
 // visualização pública/interna do artigo analisem markdown identicamente (tabelas, listas de tarefas, quebras).
@@ -256,6 +257,7 @@ export function TipTapEditor({
           HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
         },
       }),
+      Markdown,
       Blockquote,
       HorizontalRule,
       Image.configure({ inline: false, allowBase64: false }),
@@ -478,7 +480,7 @@ export function TipTapEditor({
   return (
     <div ref={containerRef} className={cn('relative', className)}>
       <Toolbar editor={editor} />
-      <div className="rounded-b-lg border border-t-0 border-input bg-background px-4 py-3">
+      <div className="rounded-b-lg border border-t-0 border-input bg-background px-5 py-4">
         <EditorContent editor={editor} />
       </div>
 
@@ -490,7 +492,7 @@ export function TipTapEditor({
           <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b border-border">
             Blocos
           </div>
-          <div className="p-1">
+          <div className="p-1.5">
             {filteredCommands.map((cmd, idx) => (
               <button
                 key={cmd.title}
@@ -678,7 +680,7 @@ function Toolbar({ editor }: { editor: Editor | null }) {
     },
   ]
   return (
-    <div className="flex flex-wrap items-center gap-0.5 rounded-t-lg border border-input bg-muted/40 px-2 py-1.5">
+    <div className="flex flex-wrap items-center gap-1 rounded-t-lg border border-input bg-muted/40 px-3 py-2.5">
       {tools.map((t, i) => (
         <Button
           key={i}

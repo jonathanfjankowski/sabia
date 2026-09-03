@@ -50,3 +50,32 @@ docker compose -f docker-compose.prod.yml exec api php artisan migrate
 - **`postgres` (pgvector)** — banco com extensão de embeddings vetoriais.
 - **`api` (Laravel)** — backend PHP. Em dev roda `artisan serve`; em prod o mesmo comando dentro do container.
 - **`web` (nginx/Vite)** — frontend. Em dev é o servidor de dev do Vite (HMR); em prod é o nginx servindo o `vite build` estático com SPA fallback (`try_files ... /index.html`).
+
+## Embedding sidecar (BAAI/bge-m3)
+
+Serviço Python local que gera embeddings de 1024 dimensões sem custo de
+API. Suba junto com o compose — primeiro build baixa ~1GB de modelo.
+
+```bash
+docker compose -f docker-compose.dev.yml up -d embedding-sidecar
+curl http://localhost:8001/health
+# {"ok": true}
+```
+
+Variável de ambiente: `EMBEDDING_URL` (compose já injeta
+`http://embedding-sidecar:8000`).
+
+**Atenção prod:** `config:cache` é executado no **entrypoint** do
+container api (`docker-entrypoint.sh`), não no build. Isso garante que
+`EMBEDDING_URL`, `DB_*` e outras envs injetadas pelo compose cheguem
+ao config cacheado. O entrypoint também roda `migrate --force` no
+startup. Para re-embedar:
+
+```bash
+docker compose -f docker-compose.dev.yml exec api php artisan chunks:reembed
+```
+
+Após a migration `2026_09_01_010000` (768→1024) os chunks existentes
+ficam inválidos. Re-embed obrigatório antes de abrir tráfego em prod.
+
+Ver `EMBEDDING_SIDECAR.md` na raiz para arquitetura e troubleshooting.

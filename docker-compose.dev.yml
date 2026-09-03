@@ -45,9 +45,12 @@ services:
       - SESSION_DOMAIN=localhost
       - ALLOWED_ORIGINS=http://localhost:5173
       - SECURITY_HEADERS_ENABLED=false
+      - EMBEDDING_URL=http://embedding-sidecar:8000
     depends_on:
       postgres:
         condition: service_healthy
+      embedding-sidecar:
+        condition: service_started
     ports:
       - "8000:8000"
     volumes:
@@ -58,6 +61,19 @@ services:
       # Keep storage/ writable.
       - ./sabia-api/storage:/var/www/storage
       - ./sabia-api/bootstrap/cache:/var/www/bootstrap/cache
+    networks:
+      - sabia-dev-network
+
+  # Sidecar de embeddings (BAAI/bge-m3, 1024 dims) — ver EMBEDDING_SIDECAR.md.
+  # Primeiro build demora: baixa ~1GB de modelo.
+  embedding-sidecar:
+    build: ./embedding-sidecar
+    container_name: sabia_embedding_dev
+    expose:
+      - "8000"
+    ports:
+      - "8001:8000" # exposto no dev para testar com curl direto
+    restart: unless-stopped
     networks:
       - sabia-dev-network
 

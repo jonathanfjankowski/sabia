@@ -434,6 +434,7 @@ export const handlers = [
       created_by: user.id,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      deleted_at: null,
     }
     db.articles.push(newArticle)
     return json(newArticle, 201)
@@ -489,6 +490,7 @@ export const handlers = [
       created_by: user.id,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      deleted_at: null,
     }
     db.articles.push(newArticle)
     return json(newArticle, 201)
@@ -658,6 +660,21 @@ export const handlers = [
     return new HttpResponse(stream, {
       headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
     })
+  }),
+
+  // ─── Admin: Embedding sidecar (ver EMBEDDING_SIDECAR.md) ─────────────────
+  http.post(`${API}/admin/settings/ai/test-embed`, async ({ request }) => {
+    const user = requireAuth(request)
+    if (!user || user.role !== 'gestor') return unauthorized()
+
+    return json({ ok: true, dimensions: 1024, latency_ms: 87, url: db.ai_settings.embedding_sidecar_url })
+  }),
+
+  http.get(`${API}/admin/embedding-sidecar/health`, ({ request }) => {
+    const user = requireAuth(request)
+    if (!user || user.role !== 'gestor') return unauthorized()
+
+    return json({ ok: db.ai_settings.embedding_sidecar_connected, url: db.ai_settings.embedding_sidecar_url })
   }),
 
   // ─── Admin: Settings Widget ───────────────────────────────────────────────

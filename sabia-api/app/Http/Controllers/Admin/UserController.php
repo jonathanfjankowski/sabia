@@ -9,13 +9,14 @@ use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Str;
 
 class UserController extends Controller
 {
     public function index(): JsonResponse
     {
         $users = Profile::with('user')->get();
+
         return response()->json($users);
     }
 
@@ -31,7 +32,7 @@ class UserController extends Controller
         DB::transaction(function () use ($data) {
             $user = User::create([
                 'email' => $data['email'],
-                'password' => bcrypt(\Illuminate\Support\Str::random(20)),
+                'password' => bcrypt(Str::random(20)),
             ]);
 
             Profile::create([

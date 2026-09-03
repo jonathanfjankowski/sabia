@@ -52,7 +52,7 @@ class TeamsNotificationService
 
     private function send(string $type, array $payload): bool
     {
-        if (!$this->webhookUrl) {
+        if (! $this->webhookUrl) {
             return false;
         }
 
@@ -72,12 +72,14 @@ class TeamsNotificationService
             ];
 
             $response = $this->client()->post($this->webhookUrl, $card);
+
             return $response->successful();
         } catch (\Throwable $e) {
             Log::warning('Teams webhook failed', [
                 'type' => $type,
                 'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }

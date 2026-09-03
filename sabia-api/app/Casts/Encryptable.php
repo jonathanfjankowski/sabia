@@ -25,6 +25,7 @@ class Encryptable implements CastsAttributes
         if (blank($value)) {
             return null;
         }
+
         return Crypt::encryptString((string) $value);
     }
 }

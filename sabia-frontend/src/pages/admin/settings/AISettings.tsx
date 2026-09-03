@@ -26,6 +26,10 @@ export function AISettings() {
   const [testMessage, setTestMessage] = useState('')
   const [testStream, setTestStream] = useState('')
   const [testing, setTesting] = useState(false)
+  const [testingEmbed, setTestingEmbed] = useState(false)
+  const [embedTestResult, setEmbedTestResult] = useState<
+    { ok: boolean; dimensions: number; latency_ms: number } | null
+  >(null)
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -50,6 +54,23 @@ export function AISettings() {
       toast.error('Erro ao salvar')
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Testa o sidecar de embeddings (ou o endpoint configurado).
+  const testEmbed = async () => {
+    setTestingEmbed(true)
+    setEmbedTestResult(null)
+    try {
+      const res = await api.post<{ ok: boolean; dimensions: number; latency_ms: number }>(
+        '/admin/settings/ai/test-embed',
+        {},
+      )
+      setEmbedTestResult(res)
+    } catch {
+      setEmbedTestResult({ ok: false, dimensions: 0, latency_ms: 0 })
+    } finally {
+      setTestingEmbed(false)
     }
   }
 
@@ -289,6 +310,62 @@ export function AISettings() {
           <Card className="space-y-4 p-5">
             <div className="flex items-center gap-2">
               <Sliders className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold">Provedor de embeddings</h3>
+              <span
+                className={`inline-block h-2 w-2 rounded-full ${
+                  settings.embedding_sidecar_connected ? 'bg-emerald-500' : 'bg-amber-500'
+                }`}
+                title={settings.embedding_sidecar_connected ? 'Sidecar conectado' : 'Sidecar indisponível'}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="embed-provider">Provedor</Label>
+              <select
+                id="embed-provider"
+                value={settings.embedding_provider ?? 'sidecar'}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    embedding_provider: e.target.value as AiSettings['embedding_provider'],
+                  })
+                }
+                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+              >
+                <option value="sidecar">Sidecar BAAI/bge-m3 (local)</option>
+                <option value="openai">OpenAI</option>
+                <option value="gemini">Gemini</option>
+                <option value="custom">Custom (endpoint próprio)</option>
+              </select>
+              {settings.embedding_provider === 'sidecar' && (
+                <p className="text-[11px] text-muted-foreground">
+                  URL via env <code>EMBEDDING_URL</code>:{' '}
+                  <code>{settings.embedding_sidecar_url ?? 'http://embedding-sidecar:8000'}</code>
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={testEmbed}
+                disabled={testingEmbed}
+              >
+                {testingEmbed ? 'Testando…' : 'Testar embedding'}
+              </Button>
+              {embedTestResult && (
+                <span className="text-xs text-muted-foreground">
+                  {embedTestResult.ok
+                    ? `OK · ${embedTestResult.dimensions} dims · ${embedTestResult.latency_ms}ms`
+                    : 'falhou — verifique se o sidecar está no ar'}
+                </span>
+              )}
+            </div>
+          </Card>
+
+          <Card className="space-y-4 p-5">
+            <div className="flex items-center gap-2">
+              <Sliders className="h-4 w-4 text-primary" />
               <h3 className="text-sm font-semibold">Parâmetros RAG</h3>
            </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -333,6 +410,53 @@ export function AISettings() {
                 />
              </div>
            </div>
+         </Card>
+
+          {(settings.embedding_provider ?? 'sidecar') !== 'sidecar' && (
+            <Card className="space-y-4 p-5">
+              <div className="flex items-center gap-2">
+                <KeyRound className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Endpoint de embeddings</h3>
+             </div>
+              <p className="text-[11px] text-muted-foreground -mt-2">
+                Se vazio, o Sabia usa o mesmo endpoint e API key do chat. Preencha quando o
+                provedor de chat não suporta embeddings (ex.: proxy LiteLLM sem rota de embed).
+             </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="embed-endpoint">Endpoint de embeddings</Label>
+                  <Input
+                    id="embed-endpoint"
+                    value={settings.embedding_endpoint ?? ''}
+                    onChange={(e) =>
+                      setSettings({ ...settings, embedding_endpoint: e.target.value })
+                    }
+                    placeholder="https://api.openai.com/v1"
+                  />
+               </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="embed-key" className="flex items-center gap-2">
+                    <KeyRound className="h-3.5 w-3.5" />
+                    API Key de embeddings
+                 </Label>
+                  <Input
+                    id="embed-key"
+                    type="password"
+                    value={settings.embedding_api_key ?? ''}
+                    onChange={(e) =>
+                      setSettings({ ...settings, embedding_api_key: e.target.value })
+                    }
+                    placeholder="••••••••••••••••"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Criptografada em repouso (AES-256). Deixada em branco para manter a chave atual.
+                 </p>
+               </div>
+             </div>
+            </Card>
+          )}
+
+          <Card className="space-y-4 p-5">
             <div className="space-y-2">
               <Label htmlFor="rag-threshold">
                 Threshold de confiança: {settings.confidence_threshold.toFixed(3)}

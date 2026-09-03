@@ -22,7 +22,7 @@ return new class extends Migration
             $table->decimal('confidence', 4, 3)->nullable(); // NUMERIC(4,3)
             $table->timestampsTz();
         });
-        
+
         // Add indexes
         Schema::table('messages', function (Blueprint $table) {
             $table->index('conversation_id');

@@ -29,17 +29,20 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction
 # Copy application code
 COPY . .
 
-# Generate application key
-RUN php artisan key:generate --force
+# APP_KEY NÃO é gerada aqui: chave baked na imagem invalida os dados
+# cifrados a cada rebuild e expõe a chave a quem tiver a imagem.
+# O entrypoint gera/usa a chave em runtime (env APP_KEY do compose).
 
-# Optimize for production
-RUN php artisan config:cache \
-    && php artisan route:cache \
-    && php artisan view:cache
+# Optimize for production (config:cache movido para o entrypoint —
+# roda no startup do container, quando as envs de runtime já existem)
+RUN php artisan view:cache
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
 
+COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
 EXPOSE 8000
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]

@@ -13,7 +13,7 @@ class SecurityHeaders
     {
         $response = $next($request);
 
-        if (!config('security.enabled', true)) {
+        if (! config('security.enabled', true)) {
             return $response;
         }
 
@@ -25,10 +25,10 @@ class SecurityHeaders
             $headers['X-Frame-Options'] = config('security.widget.X-Frame-Options', 'SAMEORIGIN');
 
             $allowed = WidgetSettings::current()->allowed_domains ?? [];
-            if (!empty($allowed)) {
-                $ancestors = implode(' ', array_map(fn ($d) => 'https://' . ltrim($d, '.'), $allowed));
+            if (! empty($allowed)) {
+                $ancestors = implode(' ', array_map(fn ($d) => 'https://'.ltrim($d, '.'), $allowed));
                 $headers['Content-Security-Policy'] = preg_replace(
-                    "/frame-ancestors [^;]+/",
+                    '/frame-ancestors [^;]+/',
                     "frame-ancestors 'self' {$ancestors}",
                     $headers['Content-Security-Policy'] ?? ''
                 );

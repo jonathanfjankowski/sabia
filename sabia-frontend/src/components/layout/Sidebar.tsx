@@ -76,11 +76,11 @@ export function Sidebar({ collapsed }: { collapsed?: boolean }) {
         className={cn(
           'group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
           isActive
-            ? 'bg-primary/10 text-primary'
-            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+            ? 'bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]'
+            : 'text-sidebar-foreground/70 hover:bg-[hsl(var(--primary)/0.1)] hover:text-[hsl(var(--primary))]'
         )}
       >
-        <Icon className={cn('h-4 w-4 shrink-0', isActive && 'text-primary')} />
+        <Icon className={cn('h-4 w-4 shrink-0', isActive && 'text-[hsl(var(--primary))]')} />
         {!collapsed && <span className="truncate">{item.label}</span>}
       </NavLink>
     )
@@ -95,14 +95,7 @@ export function Sidebar({ collapsed }: { collapsed?: boolean }) {
     >
       {/* Brand */}
       <div className="flex h-16 items-center gap-2.5 border-b border-sidebar-border px-4">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-soft">
-          <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
-            <path
-              d="M12 4c-1.5 0-2.7 1.2-2.7 2.7 0 .6.2 1.2.5 1.7-1.2.5-2 1.7-2 3.1 0 1.9 1.6 3.2 3.6 3.2.7 0 1.3-.1 1.8-.4.3.6.9 1.1 1.6 1.1.9 0 1.7-.8 1.7-1.7 0-.4-.1-.8-.4-1.1.7-.5 1.1-1.3 1.1-2.3 0-1.7-1.4-3-3.1-3-.3 0-.5 0-.8.1.3-.4.5-.8.5-1.3 0-1.5-1.2-2.7-2.7-2.7z"
-              fill="currentColor"
-            />
-          </svg>
-        </div>
+        <img src="/sabialogo.png" alt="Sabiá" className="h-9 w-auto object-contain" />
         {!collapsed && (
           <div className="min-w-0">
             <div className="truncate text-sm font-bold leading-tight">{brand.app_name}</div>

@@ -2,11 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\AiSettings;
 use App\Models\Article;
 use App\Models\ArticleChunk;
-use App\Models\AiSettings;
-use App\Services\AIProvider;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 /**
@@ -18,7 +18,7 @@ use Illuminate\Support\Str;
 class ArticleChunkService
 {
     public function __construct(
-        private AiSettings $settings = null,
+        private ?AiSettings $settings = null,
     ) {
         $this->settings ??= AiSettings::current();
     }
@@ -44,18 +44,62 @@ class ArticleChunkService
         $provider = new AIProvider($this->settings);
         $created = 0;
 
+        // Sidecar: batch em uma chamada HTTP. Se falhar, cai no loop
+        // per-chunk — mas forçamos o fallback para o provedor de chat
+        // para não re-pingar um sidecar quebrado a cada chunk.
+        $sidecarDown = false;
+        if (($this->settings->embedding_provider ?? null) === 'sidecar') {
+            $valid = [];
+            $idxMap = [];
+            foreach ($chunks as $i => $c) {
+                $c = trim($c);
+                if ($c !== '') {
+                    $valid[] = $c;
+                    $idxMap[] = $i;
+                }
+            }
+            $vectors = app(EmbeddingService::class)->embedBatch($valid);
+
+            if (count($vectors) === count($valid)) {
+                foreach ($valid as $k => $content) {
+                    ArticleChunk::create([
+                        'article_id' => $article->id,
+                        'content' => $content,
+                        'chunk_index' => $idxMap[$k],
+                        'embedding' => $vectors[$k],
+                        'keywords' => $this->extractKeywords($content),
+                    ]);
+                    $created++;
+                }
+
+                return $created;
+            }
+
+            app(SystemLogService::class)->log(
+                'warning', 'chunk_embedding', 'Batch falhou, caindo para per-chunk',
+                ['article_id' => $article->id, 'expected' => count($valid), 'got' => count($vectors)]
+            );
+            $sidecarDown = true;
+        }
+
         foreach ($chunks as $index => $content) {
             // Skip empty chunks
             $content = trim($content);
-            if ($content === '') continue;
+            if ($content === '') {
+                continue;
+            }
 
             try {
-                $embedding = $provider->embed($content);
+                // Sidecar já falhou no batch: vai direto ao provedor de chat.
+                $embedding = $sidecarDown
+                    ? $this->embedViaChatProvider($content)
+                    : $provider->embed($content);
                 if (empty($embedding)) {
-                    app(\App\Services\SystemLogService::class)->log(
+                    app(SystemLogService::class)->log(
                         'warning', 'chunk_embedding', 'Embedding vazio para chunk',
                         ['article_id' => $article->id, 'chunk_index' => $index]
                     );
+
                     continue;
                 }
 
@@ -68,7 +112,7 @@ class ArticleChunkService
                 ]);
                 $created++;
             } catch (\Throwable $e) {
-                app(\App\Services\SystemLogService::class)->log(
+                app(SystemLogService::class)->log(
                     'error', 'chunk_embedding', 'Falha ao gerar embedding',
                     ['article_id' => $article->id, 'chunk_index' => $index, 'error' => $e->getMessage()]
                 );
@@ -84,7 +128,7 @@ class ArticleChunkService
      *
      * @return array<string> Lista de chunks
      */
-    private function splitContent(string $content): array
+    public function splitContent(string $content): array
     {
         $chunkSize = (int) $this->settings->chunk_size;
         $overlap = (int) $this->settings->chunk_overlap;
@@ -109,13 +153,13 @@ class ArticleChunkService
         $buffer = '';
 
         foreach ($paragraphs as $paragraph) {
-            $paragraph = trim($paragraph) . "\n\n";
+            $paragraph = trim($paragraph)."\n\n";
 
             // If adding this paragraph exceeds chunk_size, finalize current chunk
             if (Str::length($current) + Str::length($paragraph) > $chunkSize && $current !== '') {
                 $chunks[] = trim($current);
                 // Start new chunk with overlap from end of previous
-                $current = $this->getOverlap($current, $overlap) . $paragraph;
+                $current = $this->getOverlap($current, $overlap).$paragraph;
             } else {
                 $current .= $paragraph;
             }
@@ -160,9 +204,9 @@ class ArticleChunkService
             // Try to break at sentence boundary
             if ($end < $len) {
                 $lastPunct = max(
-                    Str::lastIndexOf($chunk, '. '),
-                    Str::lastIndexOf($chunk, '! '),
-                    Str::lastIndexOf($chunk, '? ')
+                    mb_strrpos($chunk, '. '),
+                    mb_strrpos($chunk, '! '),
+                    mb_strrpos($chunk, '? ')
                 );
                 if ($lastPunct > $chunkSize * 0.5) {
                     $end = $start + $lastPunct + 1;
@@ -171,8 +215,13 @@ class ArticleChunkService
             }
 
             $chunks[] = trim($chunk);
+            if ($end >= $len) {
+                break; // último pedaço — sem o break, start = len - overlap trava o loop
+            }
             $start = $end - $overlap;
-            if ($start < 0) $start = 0;
+            if ($start < 0) {
+                $start = 0;
+            }
         }
 
         return $chunks;
@@ -184,7 +233,10 @@ class ArticleChunkService
     private function getOverlap(string $text, int $overlap): string
     {
         $len = Str::length($text);
-        if ($len <= $overlap) return $text;
+        if ($len <= $overlap) {
+            return $text;
+        }
+
         return Str::substr($text, $len - $overlap);
     }
 
@@ -202,12 +254,17 @@ class ArticleChunkService
 
         $freq = [];
         foreach ($words as $w) {
-            if (Str::length($w) < 4) continue; // skip short words
-            if (in_array($w, $this->stopWords(), true)) continue;
+            if (Str::length($w) < 4) {
+                continue;
+            } // skip short words
+            if (in_array($w, $this->stopWords(), true)) {
+                continue;
+            }
             $freq[$w] = ($freq[$w] ?? 0) + 1;
         }
 
         arsort($freq);
+
         return array_slice(array_keys($freq), 0, 10);
     }
 
@@ -219,5 +276,30 @@ class ArticleChunkService
             'entre', 'após', 'antes', 'durante', 'através', 'também', 'mesmo',
             'outro', 'outra', 'outros', 'outras', 'pode', 'poder', 'devem', 'deve',
         ];
+    }
+
+    /**
+     * Fallback direto ao provedor de chat (OpenAI-compatível). Usado quando
+     * o sidecar já caiu no batch e queremos evitar pagar timeout a cada chunk.
+     */
+    private function embedViaChatProvider(string $text): array
+    {
+        $endpoint = rtrim($this->settings->embedding_endpoint ?? $this->settings->endpoint ?? '', '/').'/embeddings';
+        $apiKey = $this->settings->embedding_api_key ?? $this->settings->api_key;
+        $model = $this->settings->embedding_model ?: $this->settings->model;
+
+        if (! $endpoint || ! $apiKey) {
+            return [];
+        }
+
+        try {
+            $response = Http::withToken($apiKey)
+                ->timeout(120)
+                ->post($endpoint, ['model' => $model, 'input' => $text]);
+        } catch (ConnectionException $e) {
+            return [];
+        }
+
+        return $response->ok() ? ($response->json('data.0.embedding') ?? []) : [];
     }
 }

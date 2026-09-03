@@ -16,7 +16,7 @@ class DatabaseSeeder extends Seeder
         // 1. Create gestor user
         $user = User::create([
             'name' => 'Gestor Sabiá',
-            'email' => 'gestor@sabia.local',
+            'email' => 'gestor@sabia.com',
             'password' => Hash::make('password123'),
             'email_verified_at' => now(),
         ]);
@@ -106,6 +106,24 @@ class DatabaseSeeder extends Seeder
         foreach ($articles as $articleData) {
             Article::create($articleData);
         }
+
+        // 4. Settings (evita INSERT negado por RLS quando o widget acessa um
+        // banco recém-migrado — os current() tentariam create())
+        \App\Models\AiSettings::firstOrCreate([], [
+            'provider' => 'openai',
+            'endpoint' => 'https://api.openai.com/v1',
+            'model' => 'gpt-4o',
+            'embedding_model' => 'text-embedding-3-small',
+        ]);
+        \App\Models\WidgetSettings::firstOrCreate([], [
+            'welcome_message' => 'Olá! Sou o assistente virtual. Como posso ajudar?',
+        ]);
+        \App\Models\BrandSettings::firstOrCreate([], [
+            'app_name' => 'Sabiá',
+            'primary_color' => '#6366f1',
+            'secondary_color' => '#4f46e5',
+            'font' => 'Inter',
+        ]);
 
         $this->command?->info('Database seeded: 1 gestor, 4 categories, 3 articles (2 internal, 1 public)');
     }

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { MessageSquare, X, Send, Sparkles, Minus, PhoneCall, ExternalLink } from 'lucide-react'
 import { api } from '@/lib/api'
 import type { WidgetSettings, BrandSettings, Message } from '@/types'
@@ -12,8 +11,6 @@ import { ConfidenceBadge } from '@/components/common/ConfidenceBadge'
 import { Link } from 'react-router-dom'
 
 export function PublicWidget() {
-  const [searchParams] = useSearchParams()
-  const token = searchParams.get('t') || ''
   const brand = useBrandStore((s) => s.brand)
 
   const [settings, setSettings] = useState<WidgetSettings | null>(null)
@@ -25,7 +22,14 @@ export function PublicWidget() {
   const [streaming, setStreaming] = useState(false)
   const [streamingText, setStreamingText] = useState('')
   const [conversationId, setConversationId] = useState<string>()
-  const [sessionId] = useState(() => token || `sess-${Math.random().toString(36).slice(2, 10)}`)
+  // Credencial de posse da conversa deste visitante (CSPRNG) — nunca o token
+  // de embed, que é igual para todo mundo que carrega a página
+  const [sessionId, setSessionId] = useState(() => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID()
+    }
+    return `sess-${Array.from(crypto.getRandomValues(new Uint32Array(4))).join('-')}`
+  })
   const [minimized, setMinimized] = useState(false)
   const [transferring, setTransferring] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -71,6 +75,17 @@ export function PublicWidget() {
           session_id: sessionId,
         }),
       })
+      if (!res.ok) {
+        // 400/403/503 vêm como JSON — sem isso o erro virava silêncio
+        let msg = 'Não foi possível enviar sua mensagem. Tente novamente.'
+        try {
+          const data = await res.json()
+          if (data?.message) msg = data.message
+        } catch {
+          // corpo não-JSON
+        }
+        throw new Error(msg)
+      }
       if (!res.body) throw new Error('Sem stream')
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -92,6 +107,10 @@ export function PublicWidget() {
             const parsed = JSON.parse(payload)
             if (parsed.conversation_id && !conversationId) {
               setConversationId(parsed.conversation_id)
+            }
+            // Backend pode ter emitido um session_id (quando o cliente não mandou)
+            if (parsed.session_id && parsed.session_id !== sessionId) {
+              setSessionId(parsed.session_id)
             }
             if (typeof parsed.text === 'string') {
               acc += parsed.text
@@ -121,14 +140,18 @@ export function PublicWidget() {
           },
         ])
       }
-    } catch {
+    } catch (err) {
+      const detail =
+        err instanceof Error && err.message
+          ? err.message
+          : 'Erro de conexão. Tente novamente.'
       setMessages((prev) => [
         ...prev,
         {
           id: Date.now(),
           conversation_id: conversationId ?? '',
           role: 'assistant',
-          content: 'Erro de conexao. Tente novamente.',
+          content: detail,
           has_images: false,
           created_at: new Date().toISOString(),
         },
@@ -144,13 +167,28 @@ export function PublicWidget() {
     setTransferring(true)
     try {
       const result = await api.post<{ transferred: boolean; reason?: string; link?: string }>(
-        `/widget/conversations/${conversationId}/transfer`
+        `/widget/conversations/${conversationId}/transfer`,
+        { session_id: sessionId }
       )
       if (result.transferred && result.link) {
         window.open(result.link, '_blank')
       }
-    } catch {
-      // silent fail
+    } catch (err) {
+      const detail =
+        err instanceof Error && err.message
+          ? err.message
+          : 'Não foi possível falar com o suporte agora. Tente novamente.'
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now(),
+          conversation_id: conversationId ?? '',
+          role: 'assistant',
+          content: detail,
+          has_images: false,
+          created_at: new Date().toISOString(),
+        },
+      ])
     } finally {
       setTransferring(false)
     }

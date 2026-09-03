@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AuditLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 
 class AuditService
 {
@@ -24,7 +25,9 @@ class AuditService
         AuditLog::create([
             'user_id' => $userId,
             'action' => $action,
-            'entity_type' => $entityType,
+            // Normaliza "AiSettings" → "ai_settings": os callers passam o
+            // nome da classe; o banco/filtros esperam snake_case
+            'entity_type' => $entityType !== null ? Str::snake($entityType) : null,
             'entity_id' => $entityId !== null ? (string) $entityId : null,
             'old_value' => $oldValue,
             'new_value' => $newValue,

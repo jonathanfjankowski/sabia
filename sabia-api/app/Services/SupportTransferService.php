@@ -3,16 +3,15 @@
 namespace App\Services;
 
 use App\Models\Conversation;
-use App\Models\WidgetSettings;
 use App\Models\Message;
+use App\Models\WidgetSettings;
 use App\Services\Teams\TeamsNotificationService;
-use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class SupportTransferService
 {
     public function __construct(
-        private TeamsNotificationService $teams = new TeamsNotificationService(),
+        private TeamsNotificationService $teams = new TeamsNotificationService,
     ) {}
 
     public function tryTransfer(Conversation $conversation): array
@@ -28,6 +27,7 @@ class SupportTransferService
         if ($settings->maintenance_mode) {
             $result['reason'] = 'maintenance';
             $this->notifyTeamsIfEnabled($settings, 'maintenance', $conversation);
+
             return $result;
         }
 
@@ -36,9 +36,10 @@ class SupportTransferService
         $start = $settings->support_start_time ? Carbon::createFromFormat('H:i', $settings->support_start_time) : null;
         $end = $settings->support_end_time ? Carbon::createFromFormat('H:i', $settings->support_end_time) : null;
 
-        if ($start && $end && !$this->isWithinHours($now, $start, $end)) {
+        if ($start && $end && ! $this->isWithinHours($now, $start, $end)) {
             $result['reason'] = 'out_of_hours';
             $this->notifyTeamsIfEnabled($settings, 'out_of_hours', $conversation);
+
             return $result;
         }
 
@@ -75,6 +76,7 @@ class SupportTransferService
         if ($start->lt($end)) {
             return $current >= $start->format('H:i') && $current <= $end->format('H:i');
         }
+
         // Overnight range (e.g. 22:00–06:00)
         return $current >= $start->format('H:i') || $current <= $end->format('H:i');
     }
@@ -82,7 +84,9 @@ class SupportTransferService
     private function buildSupportLink(WidgetSettings $settings, Conversation $conversation): ?string
     {
         $link = $settings->support_link;
-        if (!$link) return null;
+        if (! $link) {
+            return null;
+        }
 
         $name = $conversation->user_name ?? '';
         $email = $conversation->user?->email ?? '';
@@ -96,10 +100,12 @@ class SupportTransferService
 
     private function generateSummary(Conversation $conversation): string
     {
+        // Últimas 20 mensagens (ASC + limit pegaria as 20 mais antigas)
         $messages = Message::where('conversation_id', $conversation->id)
-            ->orderBy('created_at')
+            ->orderByDesc('created_at')
             ->limit(20)
-            ->get();
+            ->get()
+            ->reverse();
 
         if ($messages->isEmpty()) {
             return 'Sem mensagens na conversa.';
@@ -120,10 +126,12 @@ class SupportTransferService
             default => true,
         };
 
-        if (!$enabled) return;
+        if (! $enabled) {
+            return;
+        }
 
         $message = $conversation->messages()->latest()->first()?->content ?? '';
-        $this->teams->{'send' . ucfirst($type)}(
+        $this->teams->{'send'.ucfirst($type)}(
             $conversation->user_name ?? 'Anônimo',
             $message
         );

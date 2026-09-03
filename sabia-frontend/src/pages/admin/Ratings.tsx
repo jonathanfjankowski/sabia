@@ -18,16 +18,21 @@ import {
 } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { downloadCsv, formatDateTime } from '@/lib/utils'
+import { useApiError } from '@/hooks/useApiError'
 
 export function Ratings() {
   const [ratings, setRatings] = useState<RatingEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [sourceFilter, setSourceFilter] = useState<'all' | 'direct' | 'widget'>('all')
   const navigate = useNavigate()
+  const { handleError } = useApiError()
 
   useEffect(() => {
-    api.get<RatingEntry[]>('/admin/ratings').then(setRatings).finally(() => setLoading(false))
-  }, [])
+    api.get<RatingEntry[]>('/admin/ratings')
+      .then(setRatings)
+      .catch((err) => handleError(err, 'Erro ao carregar avaliações'))
+      .finally(() => setLoading(false))
+  }, [handleError])
 
   const filtered = useMemo(
     () => ratings.filter((r) => sourceFilter === 'all' || r.source === sourceFilter),

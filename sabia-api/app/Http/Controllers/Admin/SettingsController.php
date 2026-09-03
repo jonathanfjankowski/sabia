@@ -8,12 +8,17 @@ use App\Models\BrandSettings;
 use App\Models\WidgetSettings;
 use App\Services\AIProvider;
 use App\Services\AuditService;
-use App\Services\SystemLogService;
+use App\Services\EmbeddingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SettingsController extends Controller
 {
+    private const SECRET_MASK = '••••••••';
+
+    private const SECRET_FIELDS = ['api_key', 'embedding_api_key', 'teams_webhook_url'];
+
     // AI settings
     public function ai(Request $request): JsonResponse
     {
@@ -21,7 +26,10 @@ class SettingsController extends Controller
 
         // Never expose the encrypted API key — return masked version
         $data = $settings->toArray();
-        $data['api_key'] = $settings->api_key ? '••••••••' : '';
+        $data['api_key'] = $settings->api_key ? self::SECRET_MASK : '';
+        $data['embedding_api_key'] = $settings->embedding_api_key ? self::SECRET_MASK : '';
+        $data['embedding_sidecar_connected'] = app(EmbeddingService::class)->isAvailable();
+        $data['embedding_sidecar_url'] = config('services.embedding.url');
 
         return response()->json($data);
     }
@@ -32,7 +40,10 @@ class SettingsController extends Controller
             'endpoint' => 'nullable|url',
             'api_key' => 'nullable|string',
             'model' => 'required|string|max:100',
+            'embedding_provider' => 'in:sidecar,openai,gemini,custom',
             'embedding_model' => 'nullable|string|max:100',
+            'embedding_endpoint' => 'nullable|url',
+            'embedding_api_key' => 'nullable|string',
             'temperature' => 'numeric|between:0,1',
             'max_tokens' => 'integer|min:1|max:32000',
             'system_prompt' => 'nullable|string',
@@ -43,20 +54,33 @@ class SettingsController extends Controller
             'language' => 'in:pt-BR,en-US,es',
         ]);
 
+        // A chave só é atualizada quando o gestor digita uma nova; a máscara
+        // devolvida pelo GET (ou string vazia) nunca pode sobrescrever a real.
+        foreach (['api_key', 'embedding_api_key'] as $key) {
+            if (($data[$key] ?? null) === self::SECRET_MASK) {
+                unset($data[$key]);
+            } elseif (array_key_exists($key, $data) && $data[$key] === '') {
+                $data[$key] = null;
+            }
+        }
+
         $settings = AiSettings::current();
-        $old = $settings->toArray();
+        $old = $this->redactSecrets($settings->toArray());
 
         $settings->fill($data);
         $settings->updated_by = $request->user()->profile?->id;
         $settings->save();
+        AiSettings::clearCache();
 
-        AuditService::record('settings.ai.change', 'AiSettings', (string) $settings->id, $old, $settings->toArray());
+        AuditService::record('settings.ai.change', 'AiSettings', (string) $settings->id, $old, $this->redactSecrets($settings->toArray()));
 
-        $data['api_key'] = $settings->api_key ? '••••••••' : '';
+        $data['api_key'] = $settings->api_key ? self::SECRET_MASK : '';
+        $data['embedding_api_key'] = $settings->embedding_api_key ? self::SECRET_MASK : '';
+
         return response()->json($data);
     }
 
-    public function testPrompt(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
+    public function testPrompt(Request $request): StreamedResponse
     {
         $data = $request->validate([
             'system_prompt' => 'required|string',
@@ -70,12 +94,16 @@ class SettingsController extends Controller
 
         return response()->stream(function () use ($provider, $data) {
             foreach ($provider->chat($data['test_message'], $data['system_prompt']) as $chunk) {
-                echo "data: " . json_encode(['text' => $chunk]) . "\n\n";
-                ob_flush();
+                echo 'data: '.json_encode(['text' => $chunk])."\n\n";
+                if (ob_get_level() > 0) {
+                    @ob_flush();
+                }
                 flush();
             }
             echo "data: [DONE]\n\n";
-            ob_flush();
+            if (ob_get_level() > 0) {
+                @ob_flush();
+            }
             flush();
         }, 200, [
             'Content-Type' => 'text/event-stream',
@@ -84,10 +112,36 @@ class SettingsController extends Controller
         ]);
     }
 
+    // Testa conexão com o sidecar de embeddings (ver EMBEDDING_SIDECAR.md).
+    public function testEmbed(): JsonResponse
+    {
+        $t0 = microtime(true);
+        $vector = app(EmbeddingService::class)->embed('health check');
+        $latency = (int) ((microtime(true) - $t0) * 1000);
+
+        return response()->json([
+            'ok' => ! empty($vector),
+            'dimensions' => count($vector),
+            'latency_ms' => $latency,
+            'url' => config('services.embedding.url'),
+        ]);
+    }
+
+    public function sidecarHealth(): JsonResponse
+    {
+        $svc = app(EmbeddingService::class);
+
+        return response()->json([
+            'ok' => $svc->isAvailable(),
+            'url' => config('services.embedding.url'),
+        ]);
+    }
+
     // Widget settings
     public function widget(Request $request): JsonResponse
     {
         $settings = WidgetSettings::current();
+
         return response()->json($settings);
     }
 
@@ -110,13 +164,14 @@ class SettingsController extends Controller
         ]);
 
         $settings = WidgetSettings::current();
-        $old = $settings->toArray();
+        $old = $this->redactSecrets($settings->toArray());
 
         $settings->fill($data);
         $settings->updated_by = $request->user()->profile?->id;
         $settings->save();
+        WidgetSettings::clearCache();
 
-        AuditService::record('settings.widget.change', 'WidgetSettings', (string) $settings->id, $old, $settings->toArray());
+        AuditService::record('settings.widget.change', 'WidgetSettings', (string) $settings->id, $old, $this->redactSecrets($settings->toArray()));
 
         return response()->json($settings);
     }
@@ -125,6 +180,7 @@ class SettingsController extends Controller
     public function brand(Request $request): JsonResponse
     {
         $settings = BrandSettings::current();
+
         return response()->json($settings);
     }
 
@@ -140,14 +196,30 @@ class SettingsController extends Controller
         ]);
 
         $settings = BrandSettings::current();
-        $old = $settings->toArray();
+        $old = $this->redactSecrets($settings->toArray());
 
         $settings->fill($data);
         $settings->updated_by = $request->user()->profile?->id;
         $settings->save();
+        BrandSettings::clearCache();
 
-        AuditService::record('settings.brand.change', 'BrandSettings', (string) $settings->id, $old, $settings->toArray());
+        AuditService::record('settings.brand.change', 'BrandSettings', (string) $settings->id, $old, $this->redactSecrets($settings->toArray()));
 
         return response()->json($settings);
+    }
+
+    /**
+     * Substitui segredos (chaves de API, webhooks) antes de gravar/consultar
+     * o audit log — audit_logs é legível pela UI de gestão.
+     */
+    private function redactSecrets(array $data): array
+    {
+        foreach (self::SECRET_FIELDS as $field) {
+            if (! empty($data[$field])) {
+                $data[$field] = self::SECRET_MASK;
+            }
+        }
+
+        return $data;
     }
 }

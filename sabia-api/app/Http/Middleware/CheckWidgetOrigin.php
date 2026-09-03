@@ -20,13 +20,13 @@ class CheckWidgetOrigin
             return $next($request);
         }
 
-        if (!$host) {
+        if (! $host) {
             return $this->forbidden($origin);
         }
 
         foreach ($allowedDomains as $domain) {
             $domain = ltrim($domain, '.');
-            if ($host === $domain || str_ends_with($host, '.' . $domain)) {
+            if ($host === $domain || str_ends_with($host, '.'.$domain)) {
                 return $next($request);
             }
         }

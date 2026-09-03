@@ -82,6 +82,14 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: '/admin/articles/:id',
+        element: (
+          <Protected role="gestor">
+            <SuspenseBoundary><ArticleEditor /></SuspenseBoundary>
+          </Protected>
+        ),
+      },
+      {
         path: '/admin/articles/:id/edit',
         element: (
           <Protected role="gestor">

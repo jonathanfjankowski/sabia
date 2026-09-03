@@ -20,7 +20,7 @@ return new class extends Migration
             $table->json('payload')->nullable();
             $table->timestampsTz();
         });
-        
+
         // Add indexes
         Schema::table('system_logs', function (Blueprint $table) {
             $table->index('level');

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Lib\Utils;
 use App\Models\Conversation;
 use App\Models\Message;
 use Carbon\Carbon;
@@ -14,14 +15,18 @@ class ConversationController extends Controller
     {
         $user = $request->user();
 
+        $limit = min(max((int) $request->query('limit', 200), 1), 500);
+
         if ($user->profile?->isGestor()) {
             $conversations = Conversation::where('source', 'direct')
                 ->orWhere('source', 'widget')
                 ->latest()
+                ->limit($limit)
                 ->get();
         } else {
             $conversations = Conversation::forUser($user->profile?->id)
                 ->latest()
+                ->limit($limit)
                 ->get();
         }
 
@@ -33,7 +38,7 @@ class ConversationController extends Controller
         $conversation = Conversation::findOrFail($id);
 
         // IDOR check
-        if (!$request->user()->profile?->isGestor()) {
+        if (! $request->user()->profile?->isGestor()) {
             if ($conversation->user_id !== $request->user()->profile?->id) {
                 return response()->json(['message' => 'Não autorizado.'], 403);
             }
@@ -50,7 +55,7 @@ class ConversationController extends Controller
     {
         $conversation = Conversation::findOrFail($id);
 
-        if (!$request->user()->profile?->isGestor()) {
+        if (! $request->user()->profile?->isGestor()) {
             if ($conversation->user_id !== $request->user()->profile?->id) {
                 return response()->json(['message' => 'Não autorizado.'], 403);
             }
@@ -73,7 +78,7 @@ class ConversationController extends Controller
     {
         $conversation = Conversation::findOrFail($id);
 
-        if (!$request->user()->profile?->isGestor()) {
+        if (! $request->user()->profile?->isGestor()) {
             if ($conversation->user_id !== $request->user()->profile?->id) {
                 return response()->json(['message' => 'Não autorizado.'], 403);
             }
@@ -94,7 +99,7 @@ class ConversationController extends Controller
     {
         $conversation = Conversation::findOrFail($id);
 
-        if (!$request->user()->profile?->isGestor()) {
+        if (! $request->user()->profile?->isGestor()) {
             if ($conversation->user_id !== $request->user()->profile?->id) {
                 return response()->json(['message' => 'Não autorizado.'], 403);
             }
@@ -105,30 +110,30 @@ class ConversationController extends Controller
             ->get();
 
         $lines = [
-            "═══════════════════════════════════════",
-            "CONVERSA — Sabiá Suporte",
-            "═══════════════════════════════════════",
-            "Data: " . \App\Lib\Utils::formatDateTime($conversation->created_at),
-            "Canal: " . ucfirst($conversation->source),
-            "Status: " . ($conversation->is_closed ? 'Encerrada' : 'Aberta'),
-            $conversation->rating ? "Avaliação: " . str_repeat('⭐', $conversation->rating) . " ({$conversation->rating}/5)" : '',
-            "═══════════════════════════════════════",
+            '═══════════════════════════════════════',
+            'CONVERSA — Sabiá Suporte',
+            '═══════════════════════════════════════',
+            'Data: '.Utils::formatDateTime($conversation->created_at),
+            'Canal: '.ucfirst($conversation->source),
+            'Status: '.($conversation->is_closed ? 'Encerrada' : 'Aberta'),
+            $conversation->rating ? 'Avaliação: '.str_repeat('⭐', $conversation->rating)." ({$conversation->rating}/5)" : '',
+            '═══════════════════════════════════════',
         ];
 
         foreach ($messages as $msg) {
-            $role = match($msg->role) {
+            $role = match ($msg->role) {
                 'user' => 'Usuário',
                 'assistant' => 'IA',
                 default => 'Sistema',
             };
-            $time = \Carbon\Carbon::parse($msg->created_at)->format('H:i');
+            $time = Carbon::parse($msg->created_at)->format('H:i');
             $lines[] = "[{$time}] {$role}:";
             $lines[] = $msg->content;
             $lines[] = '';
         }
 
-        $lines[] = "═══════════════════════════════════════";
-        $lines[] = "Exportado em: " . now()->format('d/m/Y H:i');
+        $lines[] = '═══════════════════════════════════════';
+        $lines[] = 'Exportado em: '.now()->format('d/m/Y H:i');
 
         return response()->json([
             'filename' => "conversa-{$conversation->id}.txt",

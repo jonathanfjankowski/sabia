@@ -3,7 +3,6 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 
 return new class extends Migration
 {
@@ -28,7 +27,7 @@ return new class extends Migration
             $table->foreignUuid('created_by')->constrained('profiles');
             $table->timestampsTz();
         });
-        
+
         // Add indexes for performance
         Schema::table('articles', function (Blueprint $table) {
             $table->index('category_id');

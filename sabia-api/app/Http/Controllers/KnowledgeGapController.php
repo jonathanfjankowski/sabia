@@ -20,7 +20,7 @@ class KnowledgeGapController extends Controller
             $query->where('resolved', true);
         }
 
-        $gaps = $query->latest()->get();
+        $gaps = $query->latest()->limit(min(max((int) $request->query('limit', 200), 1), 500))->get();
 
         return response()->json($gaps);
     }

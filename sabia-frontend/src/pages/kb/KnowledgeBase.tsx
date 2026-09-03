@@ -215,13 +215,13 @@ function ArticleCard({ article, category }: { article: Article; category?: Categ
       <Card className="group h-full p-4 transition-all hover:border-primary/40 hover:shadow-elevated">
         <div className="flex items-start justify-between gap-2">
           <h3 className="line-clamp-2 font-semibold leading-tight group-hover:text-primary">
-            <HighlightText text={article.title} query={article.title} />
+            {article.title}
           </h3>
           <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
         </div>
         {article.summary && (
           <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
-            <HighlightText text={article.summary} query={article.summary} />
+            {article.summary}
           </p>
         )}
         <div className="mt-4 flex items-center gap-3 text-xs text-muted-foreground">
@@ -240,25 +240,5 @@ function ArticleCard({ article, category }: { article: Article; category?: Categ
         </div>
       </Card>
     </Link>
-  )
-}
-
-function HighlightText({ text, query }: { text: string; query?: string }) {
-  if (!query || !query.trim()) return <>{text}</>
-  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const regex = new RegExp(`(${escaped.split(' ').filter(Boolean).join('|')})`, 'gi')
-  const parts = text.split(regex)
-  return (
-    <>
-      {parts.map((part, i) =>
-        regex.test(part) ? (
-          <mark key={i} className="rounded bg-primary/15 px-0.5 text-primary">
-            {part}
-          </mark>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
-    </>
   )
 }

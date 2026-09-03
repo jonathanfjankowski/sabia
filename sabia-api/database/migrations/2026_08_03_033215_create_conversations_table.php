@@ -25,7 +25,7 @@ return new class extends Migration
             $table->enum('transfer_status', ['transferred', 'out_of_hours', 'no_answer'])->nullable();
             $table->timestampsTz();
         });
-        
+
         // Add indexes
         Schema::table('conversations', function (Blueprint $table) {
             $table->index('user_id');

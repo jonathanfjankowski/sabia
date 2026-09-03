@@ -2,12 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Article;
-use App\Models\ArticleChunk;
-use App\Models\ArticleVersion;
-use App\Models\Category;
 use App\Models\AiSettings;
+use App\Models\Article;
+use App\Models\ArticleVersion;
 use App\Services\ArticleChunkService;
+use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -16,7 +15,7 @@ use Illuminate\Support\Str;
 class ArticleController extends Controller
 {
     public function __construct(
-        private ArticleChunkService $chunkService = new ArticleChunkService(),
+        private ArticleChunkService $chunkService = new ArticleChunkService,
     ) {}
 
     // Usuários internos: artigos públicos ativos + nível de acesso correspondente
@@ -38,15 +37,22 @@ class ArticleController extends Controller
             $query->where('category_id', (int) $cat);
         }
 
-        $articles = $query->with(['category', 'createdBy'])->get();
+        $articles = $query->with(['category', 'createdBy'])->get($this->listColumns());
 
         return response()->json($articles);
     }
 
     // Admin: todos os artigos (qualquer status)
+    public function adminShow(Request $request, $id): JsonResponse
+    {
+        $article = Article::with(['category', 'createdBy'])->findOrFail($id);
+
+        return response()->json($article);
+    }
+
     public function adminIndex(Request $request): JsonResponse
     {
-        $query = Article::query();
+        $query = Article::withTrashed();
 
         if ($q = $request->query('q')) {
             $query->where(function ($q2) use ($q) {
@@ -59,7 +65,7 @@ class ArticleController extends Controller
             $query->where('status', $status);
         }
 
-        $articles = $query->with(['category', 'createdBy'])->get();
+        $articles = $query->with(['category', 'createdBy'])->get($this->listColumns());
 
         return response()->json($articles);
     }
@@ -88,6 +94,7 @@ class ArticleController extends Controller
     public function view(Request $request, $id): JsonResponse
     {
         Article::where('id', $id)->increment('views_count');
+
         return response()->json(['ok' => true]);
     }
 
@@ -162,6 +169,8 @@ class ArticleController extends Controller
         // Gera chunks + embeddings via service
         $this->chunkService->process($article);
 
+        AuditService::record('article.create', 'article', (string) $article->id, null, $article->only(['title', 'slug', 'status', 'access_level']));
+
         return response()->json($article->load('category', 'createdBy'), 201);
     }
 
@@ -180,9 +189,10 @@ class ArticleController extends Controller
 
         $oldContent = $article->content;
         $article->fill($data);
+        $original = $article->only(['title', 'status', 'access_level']);
 
-        // Incrementa versão na mudança de conteúdo
-        if ($data['content'] !== null && $data['content'] !== $oldContent) {
+        // Incrementa versão na mudança de conteúdo (só se content foi enviado)
+        if (array_key_exists('content', $data) && $data['content'] !== $oldContent) {
             ArticleVersion::create([
                 'article_id' => $article->id,
                 'version' => $article->version + 1,
@@ -194,9 +204,11 @@ class ArticleController extends Controller
 
         $article->save();
 
-        if ($data['content'] !== null) {
+        if (array_key_exists('content', $data)) {
             $this->chunkService->process($article);
         }
+
+        AuditService::record('article.update', 'article', (string) $article->id, $original, $article->only(['title', 'status', 'access_level']));
 
         return response()->json($article->load('category', 'createdBy'));
     }
@@ -204,7 +216,15 @@ class ArticleController extends Controller
     public function adminDestroy(Request $request, $id): JsonResponse
     {
         $article = Article::findOrFail($id);
-        $article->update(['status' => 'archived']);
+        $article->delete(); // soft delete
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function adminRestore(Request $request, $id): JsonResponse
+    {
+        $article = Article::withTrashed()->findOrFail($id);
+        $article->restore();
 
         return response()->json(['ok' => true]);
     }
@@ -291,6 +311,17 @@ class ArticleController extends Controller
         ]);
     }
 
+    // Listagens não carregam o content (TEXT completo, MBs com o tempo) —
+    // nenhuma tela de lista usa a coluna.
+    private function listColumns(): array
+    {
+        return [
+            'id', 'title', 'slug', 'summary', 'category_id', 'access_level',
+            'status', 'views_count', 'helpful_yes', 'helpful_no', 'version',
+            'created_by', 'created_at', 'updated_at', 'deleted_at',
+        ];
+    }
+
     // Upload de imagem — máx 4 MB (spec §9.7). Armazenado em disco público em articles/.
     public function uploadImage(Request $request): JsonResponse
     {
@@ -301,13 +332,13 @@ class ArticleController extends Controller
         $file = $request->file('image');
         // Rechecagem MIME no servidor — nunca confiar no tipo enviado pelo cliente
         $guessed = @mime_content_type($file->getRealPath()) ?: '';
-        if (!str_starts_with($guessed, 'image/')) {
+        if (! str_starts_with($guessed, 'image/')) {
             return response()->json(['message' => 'Tipo de arquivo inválido'], 422);
         }
 
         $ext = $file->getClientOriginalExtension() ?: 'png';
-        $name = Str::random(20) . '.' . preg_replace('/[^a-z0-9]/i', '', $ext);
-        $path = $file->storeAs('articles/' . date('Y/m'), $name, 'public');
+        $name = Str::random(20).'.'.preg_replace('/[^a-z0-9]/i', '', $ext);
+        $path = $file->storeAs('articles/'.date('Y/m'), $name, 'public');
 
         return response()->json([
             'url' => Storage::disk('public')->url($path),

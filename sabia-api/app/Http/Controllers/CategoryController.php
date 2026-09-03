@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Article;
 use App\Models\Category;
 use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Str;
 
 class CategoryController extends Controller
 {
@@ -18,14 +19,16 @@ class CategoryController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'name' => 'required|string|max:255',
+            'name' => 'required|string|max:255|unique:categories,name',
             'description' => 'nullable|string',
-            'color' => 'string|max:7|default:#6366f1',
-            'icon' => 'string|max:50|default:folder',
-            'sort_order' => 'integer|min:0|default:0',
+            'color' => 'sometimes|string|max:7',
+            'icon' => 'sometimes|string|max:50',
+            'sort_order' => 'sometimes|integer|min:0',
+        ], [
+            'name.unique' => 'Já existe uma categoria com este nome.',
         ]);
 
-        $data['slug'] = \Illuminate\Support\Str::slug($data['name']);
+        $data['slug'] = Str::slug($data['name']);
 
         $category = Category::create($data);
 
@@ -41,15 +44,17 @@ class CategoryController extends Controller
         $old = $category->toArray();
 
         $data = $request->validate([
-            'name' => 'sometimes|string|max:255',
+            'name' => 'sometimes|string|max:255|unique:categories,name,'.$id,
             'description' => 'nullable|string',
             'color' => 'sometimes|string|max:7',
             'icon' => 'sometimes|string|max:50',
             'sort_order' => 'sometimes|integer|min:0',
+        ], [
+            'name.unique' => 'Já existe uma categoria com este nome.',
         ]);
 
         if (isset($data['name'])) {
-            $data['slug'] = \Illuminate\Support\Str::slug($data['name']);
+            $data['slug'] = Str::slug($data['name']);
         }
 
         $category->update($data);
@@ -65,7 +70,7 @@ class CategoryController extends Controller
         $old = $category->toArray();
 
         // Soft-delete by moving articles to uncategorized
-        \App\Models\Article::where('category_id', $category->id)->update(['category_id' => null]);
+        Article::where('category_id', $category->id)->update(['category_id' => null]);
         $category->delete();
 
         AuditService::record('category.delete', 'Category', (string) $id, $old, null);

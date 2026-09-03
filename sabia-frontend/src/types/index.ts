@@ -70,6 +70,7 @@ export interface Article {
   created_by: string | null
   created_at: string
   updated_at: string
+  deleted_at: string | null
   category?: Category
   author?: Profile
 }
@@ -151,12 +152,19 @@ export interface BrandSettings {
   font: 'Inter' | 'Roboto' | 'Open Sans'
 }
 
+export type EmbeddingProvider = 'sidecar' | 'openai' | 'gemini' | 'custom'
+
 export interface AiSettings {
   provider: AiProvider
   api_key: string
   model: string
   endpoint: string
+  embedding_provider?: EmbeddingProvider
   embedding_model?: string
+  embedding_endpoint?: string
+  embedding_api_key?: string
+  embedding_sidecar_connected?: boolean
+  embedding_sidecar_url?: string
   temperature: number
   max_tokens: number
   system_prompt: string

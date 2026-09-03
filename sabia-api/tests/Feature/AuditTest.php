@@ -25,7 +25,7 @@ class AuditTest extends TestCase
         $profile = Profile::factory()->create(['user_id' => $user->id, 'role' => 'gestor', 'is_active' => true]);
         $token = $user->createToken('test', ['gestor'])->plainTextToken;
 
-        $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->postJson('/api/admin/articles', [
                 'title' => 'Test Article',
                 'content' => 'Content',
@@ -48,7 +48,7 @@ class AuditTest extends TestCase
 
         $article = Article::factory()->create(['created_by' => $profile->id]);
 
-        $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->putJson("/api/admin/articles/{$article->id}", [
                 'title' => 'Updated Title',
             ])
@@ -67,7 +67,7 @@ class AuditTest extends TestCase
         $profile = Profile::factory()->create(['user_id' => $user->id, 'role' => 'gestor', 'is_active' => true]);
         $token = $user->createToken('test', ['gestor'])->plainTextToken;
 
-        $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->putJson('/api/admin/settings/ai', [
                 'provider' => 'openai',
                 'model' => 'gpt-4o',
@@ -90,7 +90,7 @@ class AuditTest extends TestCase
         $profile = Profile::factory()->create(['user_id' => $user->id, 'role' => 'gestor', 'is_active' => true]);
         $token = $user->createToken('test', ['gestor'])->plainTextToken;
 
-        $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->putJson('/api/admin/settings/widget', [
                 'welcome_message' => 'Welcome!',
                 'support_start_time' => '08:00',
@@ -113,7 +113,7 @@ class AuditTest extends TestCase
         $user = User::factory()->create(['email' => 'target@test.com', 'password' => Hash::make('pass')]);
         $profile = Profile::factory()->create(['user_id' => $user->id, 'role' => 'operador', 'is_active' => true]);
 
-        $this->withHeaders(['Authorization' => 'Bearer ' . $gestorToken])
+        $this->withHeaders(['Authorization' => 'Bearer '.$gestorToken])
             ->deleteJson("/api/admin/users/{$profile->id}")
             ->assertOk();
 

@@ -7,14 +7,14 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-/**
+    /**
      * Run the migrations.
      */
     public function up(): void
     {
         // Enable uuid-ossp extension if not already enabled
         DB::statement('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
-        
+
         Schema::create('users', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('name');
@@ -24,14 +24,14 @@ return new class extends Migration
             $table->rememberToken();
             $table->timestamps();
         });
-        
-        // Also create the password_reset_tokens and sessions tables 
+
+        // Also create the password_reset_tokens and sessions tables
         Schema::create('password_reset_tokens', function (Blueprint $table) {
             $table->string('email')->primary();
             $table->string('token');
             $table->timestamp('created_at')->nullable();
         });
-        
+
         Schema::create('sessions', function (Blueprint $table) {
             $table->string('id')->primary();
             $table->uuid('user_id')->nullable();

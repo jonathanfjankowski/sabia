@@ -22,7 +22,7 @@ return new class extends Migration
             $table->timestampTz('resolved_at')->nullable();
             $table->timestampsTz();
         });
-        
+
         // Add indexes
         Schema::table('knowledge_gaps', function (Blueprint $table) {
             $table->index('conversation_id');

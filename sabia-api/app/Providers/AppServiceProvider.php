@@ -3,8 +3,6 @@
 namespace App\Providers;
 
 use Illuminate\Cache\RateLimiting\Limit;
-use Illuminate\Database\Eloquent\Casts\EncryptedAttribute;
-use Illuminate\Encryption\Encrypter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -18,27 +16,25 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        // Encryptable cast
-        try {
-            Encrypter::setKey(base64_decode(config('app.key')));
-        } catch (\Throwable) {
-            // chave ainda não gerada (artisan key:generate)
-        }
-
         // Rate limiters (spec §9.9)
         $this->registerRateLimiters();
     }
 
     private function registerRateLimiters(): void
     {
-        // Login: 5 tentativas / 15 min por IP (spec §9.5)
+        // Login: 5 tentativas / 15 min por IP E por conta — só por IP não
+        // impede password spraying distribuído
         RateLimiter::for('login', function (Request $request) {
-            return Limit::perMinutes(15, 5)->by($request->ip())->response(function () {
-                return response()->json(
-                    ['message' => 'Muitas tentativas. Tente novamente em 15 minutos.'],
-                    429
-                );
-            });
+            $email = strtolower((string) $request->input('email'));
+            $tooMany = fn () => response()->json(
+                ['message' => 'Muitas tentativas. Tente novamente em 15 minutos.'],
+                429
+            );
+
+            return [
+                Limit::perMinutes(15, 5)->by('login:ip:'.$request->ip())->response($tooMany),
+                Limit::perMinutes(15, 5)->by('login:email:'.$email)->response($tooMany),
+            ];
         });
 
         // Chat interno: 100 req/min por user autenticado

@@ -18,16 +18,21 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatRelativeTime } from '@/lib/utils'
 import { toast } from '@/stores/toast'
+import { useApiError } from '@/hooks/useApiError'
 
 export function KnowledgeGaps() {
   const [gaps, setGaps] = useState<KnowledgeGap[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'open' | 'resolved'>('open')
   const navigate = useNavigate()
+  const { handleError } = useApiError()
 
   const load = () => {
     setLoading(true)
-    api.get<KnowledgeGap[]>('/admin/knowledge-gaps').then(setGaps).finally(() => setLoading(false))
+    api.get<KnowledgeGap[]>('/admin/knowledge-gaps')
+      .then(setGaps)
+      .catch((err) => handleError(err, 'Erro ao carregar lacunas'))
+      .finally(() => setLoading(false))
   }
 
   useEffect(load, [])
@@ -43,8 +48,8 @@ export function KnowledgeGaps() {
       await api.put(`/admin/knowledge-gaps/${id}/resolve`)
       toast.success('Lacuna marcada como resolvida')
       load()
-    } catch {
-      toast.error('Erro')
+    } catch (err) {
+      handleError(err, 'Erro ao resolver lacuna')
     }
   }
 

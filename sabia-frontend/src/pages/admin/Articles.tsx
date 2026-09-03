@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, FileText, Eye, ThumbsUp, MoreVertical, Archive, Edit, FileEdit } from 'lucide-react'
+import { Plus, Search, FileText, Eye, ThumbsUp, MoreVertical, Archive, Edit, FileEdit, RotateCcw, Send, Trash2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import type { Article, Category } from '@/types'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -66,6 +66,37 @@ export function AdminArticles() {
       load()
     } catch {
       toast.error('Erro ao arquivar')
+    }
+  }
+
+  const handleUpdateStatus = async (id: number, status: 'active') => {
+    try {
+      await api.put(`/admin/articles/${id}`, { status })
+      toast.success(status === 'active' ? 'Artigo ativado' : 'Artigo desarquivado')
+      load()
+    } catch {
+      toast.error('Erro ao atualizar status')
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('Tem certeza que deseja excluir este artigo?')) return
+    try {
+      await api.del(`/admin/articles/${id}`)
+      toast.success('Artigo excluído (pode ser restaurado)')
+      load()
+    } catch {
+      toast.error('Erro ao excluir')
+    }
+  }
+
+  const handleRestore = async (id: number) => {
+    try {
+      await api.post(`/admin/articles/${id}/restore`)
+      toast.success('Artigo restaurado')
+      load()
+    } catch {
+      toast.error('Erro ao restaurar')
     }
   }
 
@@ -207,12 +238,40 @@ export function AdminArticles() {
                               <Eye className="mr-2 h-4 w-4" /> Visualizar
                             </Link>
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleArchive(a.id)}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Archive className="mr-2 h-4 w-4" /> Arquivar
-                          </DropdownMenuItem>
+                          {a.deleted_at ? (
+                            <>
+                              <DropdownMenuItem onClick={() => handleRestore(a.id)} className="text-green-600 focus:text-green-600">
+                                <RotateCcw className="mr-2 h-4 w-4" /> Restaurar
+                              </DropdownMenuItem>
+                            </>
+                          ) : a.status === 'archived' ? (
+                            <>
+                              <DropdownMenuItem onClick={() => handleUpdateStatus(a.id, 'active')}>
+                                <RotateCcw className="mr-2 h-4 w-4" /> Desarquivar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleDelete(a.id)} className="text-destructive focus:text-destructive">
+                                <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                              </DropdownMenuItem>
+                            </>
+                          ) : a.status === 'draft' ? (
+                            <>
+                              <DropdownMenuItem onClick={() => handleUpdateStatus(a.id, 'active')}>
+                                <Send className="mr-2 h-4 w-4" /> Ativar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleDelete(a.id)} className="text-destructive focus:text-destructive">
+                                <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                              </DropdownMenuItem>
+                            </>
+                          ) : (
+                            <>
+                              <DropdownMenuItem onClick={() => handleArchive(a.id)} className="text-destructive focus:text-destructive">
+                                <Archive className="mr-2 h-4 w-4" /> Arquivar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleDelete(a.id)} className="text-destructive focus:text-destructive">
+                                <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>

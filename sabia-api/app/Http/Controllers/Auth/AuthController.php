@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\Profile;
+use App\Models\User;
 use App\Services\SystemLogService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,7 +14,7 @@ use Illuminate\Validation\ValidationException;
 class AuthController extends Controller
 {
     public function __construct(
-        private SystemLogService $logger = new SystemLogService(),
+        private SystemLogService $logger = new SystemLogService,
     ) {}
 
     public function login(Request $request): JsonResponse
@@ -23,10 +24,17 @@ class AuthController extends Controller
             'password' => 'required|string|min:1|max:255',
         ]);
 
-        $email = $request->input('email');
-        $user = \App\Models\User::where('email', $email)->first();
+        $email = strtolower($request->input('email'));
+        $user = User::where('email', $email)->first();
 
-        if (! $user || ! Hash::check($request->input('password'), $user->password)) {
+        // Hash dummy quando o e-mail não existe: mantém o tempo de resposta
+        // estável e não revela quais contas existem (enumeração por timing)
+        $validPassword = Hash::check(
+            $request->input('password'),
+            $user?->password ?? '$2y$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'
+        );
+
+        if (! $user || ! $validPassword) {
             $this->logger->log('warning', 'login_failed', 'Tentativa de login falhou', [
                 'email' => $email,
                 'ip' => $request->ip(),
@@ -43,8 +51,10 @@ class AuthController extends Controller
                 'email' => $email,
                 'ip' => $request->ip(),
             ]);
+            // Mesma mensagem de credenciais inválidas: confirmar que a conta
+            // existe (mas está desativada) ajudaria um atacante
             throw ValidationException::withMessages([
-                'email' => ['Usuário inativo.'],
+                'email' => ['Credenciais inválidas.'],
             ]);
         }
 

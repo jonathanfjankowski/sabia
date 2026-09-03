@@ -113,7 +113,6 @@ export function WidgetSettingsPage() {
                 id="sup-link"
                 value={settings.support_link}
                 onChange={(e) => setSettings({ ...settings, support_link: e.target.value })}
-                placeholder="https://suporte.bsoft.com.br/abrir?nome={NOME}&email={EMAIL}"
               />
               <p className="text-[11px] text-muted-foreground">
                 Placeholders <code className="rounded bg-muted px-1">{`{NOME}`}</code> e{' '}

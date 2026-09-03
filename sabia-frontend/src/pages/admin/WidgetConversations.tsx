@@ -26,6 +26,7 @@ import { MarkdownRenderer } from '@/components/common/MarkdownRenderer'
 import { StarRating } from '@/components/common/StarRating'
 import { ConfidenceBadge } from '@/components/common/ConfidenceBadge'
 import { downloadText, formatDateTime, formatTime, cn } from '@/lib/utils'
+import { useApiError } from '@/hooks/useApiError'
 
 export function WidgetConversations() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -34,10 +35,14 @@ export function WidgetConversations() {
   const [selected, setSelected] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [statusFilter, setStatusFilter] = useState<'all' | 'closed' | 'transferred' | 'out_of_hours' | 'no_answer'>('all')
+  const { handleError } = useApiError()
 
   useEffect(() => {
-    api.get<Conversation[]>('/admin/widget-conversations').then(setConversations).finally(() => setLoading(false))
-  }, [])
+    api.get<Conversation[]>('/admin/widget-conversations')
+      .then(setConversations)
+      .catch((err) => handleError(err, 'Erro ao carregar conversas'))
+      .finally(() => setLoading(false))
+  }, [handleError])
 
   useEffect(() => {
     const id = searchParams.get('id')
@@ -57,13 +62,21 @@ export function WidgetConversations() {
 
   const openConversation = async (conv: Conversation) => {
     setSelected(conv)
-    const msgs = await api.get<Message[]>(`/conversations/${conv.id}/messages`)
-    setMessages(msgs)
+    try {
+      const msgs = await api.get<Message[]>(`/conversations/${conv.id}/messages`)
+      setMessages(msgs)
+    } catch (err) {
+      handleError(err, 'Erro ao carregar mensagens')
+    }
   }
 
   const handleExport = async (conv: Conversation) => {
-    const txt = await api.get<string>(`/admin/widget-conversations/${conv.id}/export`)
-    downloadText(`widget-${conv.id}.txt`, txt)
+    try {
+      const txt = await api.get<string>(`/admin/widget-conversations/${conv.id}/export`)
+      downloadText(`widget-${conv.id}.txt`, txt)
+    } catch (err) {
+      handleError(err, 'Erro ao exportar conversa')
+    }
   }
 
   const statusBadge = (c: Conversation) => {

@@ -41,6 +41,33 @@ class WidgetSettings extends Model
 
     public static function current(): self
     {
-        return static::first() ?? static::create();
+        $key = 'widget_settings.current';
+
+        // Atributos brutos no cache (modelo serializado vira
+        // __PHP_Incomplete_Class com allowed_classes=false)
+        if (is_array($cached = cache()->get($key))) {
+            // setRawAttributes pula os casts no set (senão '[]' viraria '"[]"')
+            return (new static)->setRawAttributes($cached, true);
+        }
+
+        $settings = static::query()->first();
+
+        if (! $settings) {
+            try {
+                $settings = static::create();
+            } catch (\Throwable) {
+                // Role sabia_widget só tem SELECT — instância em memória
+                $settings = new static;
+            }
+        }
+
+        cache()->put($key, $settings->getAttributes(), now()->addMinutes(5));
+
+        return $settings;
+    }
+
+    public static function clearCache(): void
+    {
+        cache()->forget('widget_settings.current');
     }
 }

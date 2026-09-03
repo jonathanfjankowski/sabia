@@ -25,16 +25,23 @@ class VectorSearchService
     /**
      * Busca chunks relevantes para um embedding.
      *
-     * @param  array<float>  $embedding  Vetor 768 dims
+     * @param  array<float>  $embedding  Vetor 1024 dims (BAAI/bge-m3)
      * @param  int  $topN  Quantidade (default: ai_settings.rag_top_n)
      * @param  string  $accessLevel  'internal' ou 'public' — filtra articles.access_level
-     *
      * @return array<int, array{id: int, content: string, article_id: int, similarity: float}>
      */
-    public function search(array $embedding, int $topN = null, string $accessLevel = 'internal'): array
+    public function search(array $embedding, ?int $topN = null, string $accessLevel = 'internal'): array
     {
         $topN = $topN ?? (int) $this->settings->rag_top_n;
-        $vector = '[' . implode(',', $embedding) . ']';
+
+        // Guard: pgvector rejeita '[]::vector'. Se o embedding veio vazio
+        // (provider fora, chave inválida, modelo não-suporta embeddings),
+        // retornamos sem query — evita abortar a transação RLS do request.
+        if (empty($embedding)) {
+            return [];
+        }
+
+        $vector = '['.implode(',', $embedding).']';
 
         // RLS já garante isolamento (sabia_internal vê internal+public ativos; sabia_widget vê só public ativos)
         // accessLevel serve como filtro extra para clareza de intenção.
@@ -56,6 +63,7 @@ class VectorSearchService
 
         try {
             $rows = DB::select($sql, [$vector, $vector, $topN]);
+
             return array_map(fn ($r) => [
                 'id' => $r->id,
                 'content' => $r->content,
@@ -63,10 +71,11 @@ class VectorSearchService
                 'similarity' => (float) $r->similarity,
             ], $rows);
         } catch (\Throwable $e) {
-            app(\App\Services\SystemLogService::class)->log(
+            app(SystemLogService::class)->log(
                 'error', 'vector_search', 'Falha na busca vetorial',
                 ['error' => $e->getMessage(), 'topN' => $topN, 'accessLevel' => $accessLevel]
             );
+
             return [];
         }
     }
@@ -89,6 +98,7 @@ class VectorSearchService
         if ($topScore >= $threshold * 0.6) {
             return 'low';
         }
+
         return 'none';
     }
 
@@ -102,7 +112,7 @@ class VectorSearchService
         }
 
         return collect($results)
-            ->map(fn ($r) => "[relevância: " . round($r['similarity'], 3) . "]\n" . $r['content'])
+            ->map(fn ($r) => '[relevância: '.round($r['similarity'], 3)."]\n".$r['content'])
             ->implode("\n\n---\n\n");
     }
 }

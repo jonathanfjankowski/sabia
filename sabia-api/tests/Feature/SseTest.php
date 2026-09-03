@@ -24,15 +24,23 @@ class SseTest extends TestCase
         Profile::factory()->create(['user_id' => $user->id, 'role' => 'gestor', 'is_active' => true]);
         $token = $user->createToken('test', ['internal'])->plainTextToken;
 
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->post('/api/chat', [
                 'message' => 'Test message',
             ]);
 
         $response->assertStatus(200)
-            ->assertHeader('Content-Type', 'text/event-stream')
-            ->assertHeader('Cache-Control', 'no-cache')
             ->assertHeader('X-Accel-Buffering', 'no');
+        // Symfony anexa "private" ao no-cache em respostas streamadas
+        $this->assertStringContainsString(
+            'no-cache',
+            (string) $response->headers->get('Cache-Control')
+        );
+        // Content-Type chega com charset anexado — validar por prefixo
+        $this->assertStringContainsString(
+            'text/event-stream',
+            (string) $response->headers->get('Content-Type')
+        );
     }
 
     public function test_widget_chat_returns_sse_stream(): void
@@ -42,15 +50,21 @@ class SseTest extends TestCase
         $token = $user->createToken('widget', ['widget'])->plainTextToken;
 
         $response = $this->withHeaders([
-            'Authorization' => 'Bearer ' . $token,
+            'Authorization' => 'Bearer '.$token,
             'X-Session-Id' => 'test-session-123',
         ])->post('/api/widget/chat', [
             'message' => 'Test widget message',
         ]);
 
-        $response->assertStatus(200)
-            ->assertHeader('Content-Type', 'text/event-stream')
-            ->assertHeader('Cache-Control', 'no-cache');
+        $response->assertStatus(200);
+        $this->assertStringContainsString(
+            'no-cache',
+            (string) $response->headers->get('Cache-Control')
+        );
+        $this->assertStringContainsString(
+            'text/event-stream',
+            (string) $response->headers->get('Content-Type')
+        );
     }
 
     public function test_admin_test_prompt_returns_sse(): void
@@ -59,13 +73,16 @@ class SseTest extends TestCase
         Profile::factory()->create(['user_id' => $user->id, 'role' => 'gestor', 'is_active' => true]);
         $token = $user->createToken('test', ['gestor'])->plainTextToken;
 
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->post('/api/admin/settings/ai/test-prompt', [
                 'system_prompt' => 'Test prompt',
                 'test_message' => 'Hello',
             ]);
 
-        $response->assertStatus(200)
-            ->assertHeader('Content-Type', 'text/event-stream');
+        $response->assertStatus(200);
+        $this->assertStringContainsString(
+            'text/event-stream',
+            (string) $response->headers->get('Content-Type')
+        );
     }
 }

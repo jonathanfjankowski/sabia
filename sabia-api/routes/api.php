@@ -1,21 +1,20 @@
 <?php
 
-use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\HealthController;
+use App\Http\Controllers\Admin\RatingController;
+use App\Http\Controllers\Admin\SettingsController;
+use App\Http\Controllers\Admin\SystemLogController;
+use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\WidgetConversationController;
 use App\Http\Controllers\ArticleController;
 use App\Http\Controllers\ArticleSuggestionController;
+use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\KnowledgeGapController;
 use App\Http\Controllers\PublicWidgetController;
-use App\Http\Controllers\Admin\UserController;
-use App\Http\Controllers\Admin\SettingsController;
-use App\Http\Controllers\Admin\AuditLogController;
-use App\Http\Controllers\Admin\SystemLogController;
-use App\Http\Controllers\Admin\HealthController;
-use App\Http\Controllers\Admin\RatingController;
-use App\Http\Controllers\Admin\WidgetConversationController;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -44,7 +43,7 @@ Route::middleware(['rls:widget', 'widget.origin'])->prefix('widget')->group(func
 
 // ── Authenticated routes ───────────────────────────────────────────────────
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/me', [AuthController::class, 'me']);
 
@@ -94,9 +93,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
             // Articles (all statuses: gestor CRUD)
             Route::get('/articles', [ArticleController::class, 'adminIndex']);
-            Route::post('/articles', [ArticleController::class, 'store']);
-            Route::put('/articles/{id}', [ArticleController::class, 'update']);
-            Route::delete('/articles/{id}', [ArticleController::class, 'destroy']);
+            Route::get('/articles/{id}', [ArticleController::class, 'adminShow']);
+            Route::post('/articles', [ArticleController::class, 'adminStore']);
+            Route::put('/articles/{id}', [ArticleController::class, 'adminUpdate']);
+            Route::delete('/articles/{id}', [ArticleController::class, 'adminDestroy']);
+            Route::post('/articles/{id}/restore', [ArticleController::class, 'adminRestore']);
             Route::post('/articles/import', [ArticleController::class, 'import']);
             Route::post('/articles/preview-import', [ArticleController::class, 'previewImport']);
             Route::post('/articles/upload-image', [ArticleController::class, 'uploadImage'])->middleware('throttle:upload');
@@ -131,6 +132,8 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/settings/ai', [SettingsController::class, 'ai']);
             Route::put('/settings/ai', [SettingsController::class, 'aiUpdate']);
             Route::post('/settings/ai/test-prompt', [SettingsController::class, 'testPrompt']);
+            Route::post('/settings/ai/test-embed', [SettingsController::class, 'testEmbed']);
+            Route::get('/embedding-sidecar/health', [SettingsController::class, 'sidecarHealth']);
             Route::get('/settings/widget', [SettingsController::class, 'widget']);
             Route::put('/settings/widget', [SettingsController::class, 'widgetUpdate']);
             Route::get('/settings/brand', [SettingsController::class, 'brand']);

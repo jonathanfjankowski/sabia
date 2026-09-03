@@ -13,11 +13,11 @@ class CheckRole
         $user = $request->user();
         $profile = $user?->profile;
 
-        if (!$profile || !$profile->is_active) {
+        if (! $profile || ! $profile->is_active) {
             return response()->json(['message' => 'Não autorizado.'], 403);
         }
 
-        if (!in_array($profile->role, $roles, true)) {
+        if (! in_array($profile->role, $roles, true)) {
             return response()->json(['message' => 'Permissão insuficiente.'], 403);
         }
 

@@ -4,8 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Article;
 use App\Models\ArticleSuggestion;
-use App\Models\Category;
-use App\Models\Profile;
 use App\Services\ArticleChunkService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 class ArticleSuggestionController extends Controller
 {
     public function __construct(
-        private ArticleChunkService $chunkService = new ArticleChunkService(),
+        private ArticleChunkService $chunkService = new ArticleChunkService,
     ) {}
 
     // Operador/Gestor: listar próprias sugestões
@@ -71,7 +69,7 @@ class ArticleSuggestionController extends Controller
         $suggestion = ArticleSuggestion::with(['category', 'suggestedBy', 'reviewedBy', 'article'])->findOrFail($id);
 
         $profile = $request->user()->profile;
-        if (!$profile->isGestor() && $suggestion->suggested_by !== $profile->id) {
+        if (! $profile->isGestor() && $suggestion->suggested_by !== $profile->id) {
             return response()->json(['message' => 'Não autorizado.'], 403);
         }
 
@@ -130,7 +128,7 @@ class ArticleSuggestionController extends Controller
         $suggestion = ArticleSuggestion::findOrFail($id);
 
         $profile = $request->user()->profile;
-        if (!$profile->isGestor()) {
+        if (! $profile->isGestor()) {
             return response()->json(['message' => 'Apenas gestores podem aprovar.'], 403);
         }
 
@@ -175,7 +173,7 @@ class ArticleSuggestionController extends Controller
         $suggestion = ArticleSuggestion::findOrFail($id);
 
         $profile = $request->user()->profile;
-        if (!$profile->isGestor()) {
+        if (! $profile->isGestor()) {
             return response()->json(['message' => 'Apenas gestores podem aprovar.'], 403);
         }
 
@@ -227,7 +225,7 @@ class ArticleSuggestionController extends Controller
         $suggestion = ArticleSuggestion::findOrFail($id);
 
         $profile = $request->user()->profile;
-        if (!$profile->isGestor()) {
+        if (! $profile->isGestor()) {
             return response()->json(['message' => 'Apenas gestores podem rejeitar.'], 403);
         }
 

@@ -30,12 +30,12 @@ return new class extends Migration
             $table->foreignUuid('updated_by')->nullable()->constrained('profiles')->onDelete('set null');
             $table->timestampsTz();
         });
-        
+
         // Add indexes
         Schema::table('widget_settings', function (Blueprint $table) {
             $table->index('updated_by');
         });
-        
+
         // Insert default record
         DB::table('widget_settings')->insert([
             'welcome_message' => 'Olá! 👋 Sou o Sabiá, seu assistente de suporte. Como posso ajudar?',

@@ -1,8 +1,14 @@
 <?php
 
+use App\Http\Middleware\CheckAccessLevel;
+use App\Http\Middleware\CheckRole;
+use App\Http\Middleware\CheckWidgetOrigin;
+use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\SetRlsContext;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Middleware\HandleCors;
 use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -17,21 +23,21 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/*',
         ]);
         $middleware->statefulApi();
-        $middleware->append(\Illuminate\Http\Middleware\HandleCors::class);
+        $middleware->append(HandleCors::class);
 
         $middleware->appendToGroup('security', [
-            \App\Http\Middleware\SecurityHeaders::class,
+            SecurityHeaders::class,
         ]);
 
         $middleware->alias([
-            'role' => \App\Http\Middleware\CheckRole::class,
-            'access' => \App\Http\Middleware\CheckAccessLevel::class,
-            'rls' => \App\Http\Middleware\SetRlsContext::class,
-            'widget.origin' => \App\Http\Middleware\CheckWidgetOrigin::class,
+            'role' => CheckRole::class,
+            'access' => CheckAccessLevel::class,
+            'rls' => SetRlsContext::class,
+            'widget.origin' => CheckWidgetOrigin::class,
         ]);
 
         // Global middleware
-        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+        $middleware->append(SecurityHeaders::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

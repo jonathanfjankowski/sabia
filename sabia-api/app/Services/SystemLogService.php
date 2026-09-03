@@ -9,7 +9,7 @@ class SystemLogService
     public function log(string $level, string $context, string $message, array $payload = []): void
     {
         try {
-            (new SystemLog())->forceFill([
+            (new SystemLog)->forceFill([
                 'level' => $level,
                 'context' => $context,
                 'message' => $message,
