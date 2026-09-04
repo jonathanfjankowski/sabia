@@ -43,16 +43,35 @@ class AIProvider
             [['role' => 'user', 'content' => $message]]
         );
 
-        $response = $this->http()
-            ->withOptions(['stream' => true])
-            ->timeout(120)
-            ->post($endpoint, [
+        try {
+            $body = [
                 'model' => $this->settings->model,
                 'messages' => $messages,
                 'temperature' => (float) $this->settings->temperature,
-                'max_tokens' => (int) $this->settings->max_tokens,
                 'stream' => true,
-            ]);
+            ];
+            // null = não enviar: o provedor usa o padrão do modelo
+            if (! empty($this->settings->max_tokens)) {
+                $body['max_tokens'] = (int) $this->settings->max_tokens;
+            }
+
+            $response = $this->http()
+                ->withOptions(['stream' => true])
+                ->timeout(120)
+                ->post($endpoint, $body);
+        } catch (ConnectionException $e) {
+            // Sem este catch a exceção estoura DEPOIS do 1º evento do SSE:
+            // o stream morre sem [DONE] e o frontend fica "pensando" para sempre.
+            app(SystemLogService::class)->log(
+                'error',
+                'ai.chat',
+                'Provider unreachable: '.$e->getMessage(),
+                ['endpoint' => $endpoint]
+            );
+            yield '[erro: não foi possível conectar ao provedor de IA — verifique o endpoint configurado]';
+
+            return;
+        }
 
         if (! $response->ok()) {
             $body = $response->body();
@@ -67,13 +86,37 @@ class AIProvider
             return;
         }
 
+        $full = '';
         foreach ($this->parseSse($response->body()) as $json) {
             $delta = $json['choices'][0]['delta']['content']
                 ?? $json['choices'][0]['message']['content']
                 ?? null;
             if ($delta !== null) {
+                $full .= $delta;
                 yield $delta;
             }
+        }
+
+        // Nada yielded: ou o proxy ignorou stream:true (JSON puro) ou o modelo
+        // gastou o orçamento de tokens no raciocínio (reasoning models deixam
+        // content vazio). Tenta o corpo como completion normal antes de falhar.
+        if ($full === '') {
+            $content = $response->json('choices.0.message.content')
+                ?? $response->json('choices.0.text');
+
+            if (is_string($content) && $content !== '') {
+                yield $content;
+
+                return;
+            }
+
+            app(SystemLogService::class)->log(
+                'error',
+                'ai.provider',
+                'Provider respondeu sem conteúdo',
+                ['body' => substr($response->body(), 0, 1000)]
+            );
+            yield '[erro: o provedor não retornou conteúdo — modelos de raciocínio podem consumir todos os tokens antes da resposta; aumente o Máx. tokens nas configurações]';
         }
     }
 
@@ -102,16 +145,32 @@ class AIProvider
             [['role' => 'user', 'content' => $content]]
         );
 
-        $response = $this->http()
-            ->withOptions(['stream' => true])
-            ->timeout(120)
-            ->post($endpoint, [
+        try {
+            $body = [
                 'model' => $this->settings->model,
                 'messages' => $messages,
                 'temperature' => (float) $this->settings->temperature,
-                'max_tokens' => (int) $this->settings->max_tokens,
                 'stream' => true,
-            ]);
+            ];
+            if (! empty($this->settings->max_tokens)) {
+                $body['max_tokens'] = (int) $this->settings->max_tokens;
+            }
+
+            $response = $this->http()
+                ->withOptions(['stream' => true])
+                ->timeout(120)
+                ->post($endpoint, $body);
+        } catch (ConnectionException $e) {
+            app(SystemLogService::class)->log(
+                'error',
+                'ai.images',
+                'Provider unreachable: '.$e->getMessage(),
+                ['endpoint' => $endpoint]
+            );
+            yield '[erro: não foi possível conectar ao provedor de IA — verifique o endpoint configurado]';
+
+            return;
+        }
 
         if (! $response->ok()) {
             $body = $response->body();
@@ -126,13 +185,37 @@ class AIProvider
             return;
         }
 
+        $full = '';
         foreach ($this->parseSse($response->body()) as $json) {
             $delta = $json['choices'][0]['delta']['content']
                 ?? $json['choices'][0]['message']['content']
                 ?? null;
             if ($delta !== null) {
+                $full .= $delta;
                 yield $delta;
             }
+        }
+
+        // Nada yielded: ou o proxy ignorou stream:true (JSON puro) ou o modelo
+        // gastou o orçamento de tokens no raciocínio (reasoning models deixam
+        // content vazio). Tenta o corpo como completion normal antes de falhar.
+        if ($full === '') {
+            $content = $response->json('choices.0.message.content')
+                ?? $response->json('choices.0.text');
+
+            if (is_string($content) && $content !== '') {
+                yield $content;
+
+                return;
+            }
+
+            app(SystemLogService::class)->log(
+                'error',
+                'ai.provider',
+                'Provider respondeu sem conteúdo',
+                ['body' => substr($response->body(), 0, 1000)]
+            );
+            yield '[erro: o provedor não retornou conteúdo — modelos de raciocínio podem consumir todos os tokens antes da resposta; aumente o Máx. tokens nas configurações]';
         }
     }
 

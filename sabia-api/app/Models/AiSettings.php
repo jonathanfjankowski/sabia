@@ -19,6 +19,7 @@ class AiSettings extends Model
         'embedding_api_key',
         'temperature',
         'max_tokens',
+        'stream_timeout_seconds',
         'system_prompt',
         'chunk_size',
         'chunk_overlap',
@@ -31,6 +32,7 @@ class AiSettings extends Model
     protected $casts = [
         'temperature' => 'float',
         'max_tokens' => 'integer',
+        'stream_timeout_seconds' => 'integer',
         'chunk_size' => 'integer',
         'chunk_overlap' => 'integer',
         'rag_top_n' => 'integer',
@@ -55,7 +57,12 @@ class AiSettings extends Model
         if (is_array($cached = cache()->get($key))) {
             // setRawAttributes pula os casts no set: re-aplicá-los duplicaria
             // o encode (array) e re-criptografaria (Encryptable) os valores
-            return (new static)->setRawAttributes($cached, true);
+            $model = (new static)->setRawAttributes($cached, true);
+            // Sem exists=true o save() vira INSERT com o id já gravado
+            // (duplicate key / permission denied ao salvar da UI)
+            $model->exists = array_key_exists($model->getKeyName(), $cached);
+
+            return $model;
         }
 
         $settings = static::query()->first();

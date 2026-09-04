@@ -2,11 +2,15 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ArticleSuggestion extends Model
 {
+    // A PK é uuid sem default no banco — sem HasUuids o INSERT gravava id nulo
+    use HasUuids;
+
     protected $fillable = [
         'suggested_by',
         'category_id',

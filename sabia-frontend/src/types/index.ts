@@ -166,7 +166,8 @@ export interface AiSettings {
   embedding_sidecar_connected?: boolean
   embedding_sidecar_url?: string
   temperature: number
-  max_tokens: number
+  max_tokens: number | null
+  stream_timeout_seconds: number
   system_prompt: string
   chunk_size: number
   chunk_overlap: number

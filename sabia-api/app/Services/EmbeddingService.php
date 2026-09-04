@@ -39,7 +39,9 @@ class EmbeddingService
         try {
             $r = $this->client()
                 ->connectTimeout(2)
-                ->timeout(10)
+                // 30s: o primeiro embed após o boot do sidecar carrega o
+                // modelo e pode passar de 10s — não marcar down por isso.
+                ->timeout(30)
                 ->post("{$this->baseUrl}/embed", ['text' => $text]);
         } catch (ConnectionException $e) {
             $this->markDown();

@@ -27,12 +27,17 @@ class UserController extends Controller
             'full_name' => 'required|string|max:255',
             'role' => 'in:gestor,operador',
             'is_active' => 'boolean',
+            'password' => 'nullable|string|min:8',
         ]);
 
         DB::transaction(function () use ($data) {
+            // users.name é NOT NULL: sem ele o INSERT viola a constraint
             $user = User::create([
+                'name' => $data['full_name'],
                 'email' => $data['email'],
-                'password' => bcrypt(Str::random(20)),
+                // Sem senha informada, nasce aleatória (o fluxo de redefinição
+                // ainda não existe — o gestor deve informar uma no cadastro)
+                'password' => bcrypt($data['password'] ?? Str::random(20)),
             ]);
 
             Profile::create([

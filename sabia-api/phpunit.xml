@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
-         bootstrap="vendor/autoload.php"
+         bootstrap="tests/bootstrap.php"
          colors="true"
 >
     <testsuites>
@@ -17,6 +17,10 @@
             <directory>app</directory>
         </include>
     </source>
+    <!-- Estes valores valem quando a variável NÃO existe no ambiente (ex.: rodando
+         na máquina host). Variáveis presentes no container vencem o phpunit.xml
+         (PHPUnit 10+ removeu o force de <env>) — os overrides que isolam os
+         testes do ambiente de dev estão em tests/bootstrap.php. -->
     <php>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>

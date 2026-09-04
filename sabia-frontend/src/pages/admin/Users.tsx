@@ -205,6 +205,7 @@ function UserDialog({
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<Role>('operador')
   const [isActive, setIsActive] = useState(true)
+  const [password, setPassword] = useState('')
   const [saving, setSaving] = useState(false)
   const { handleError } = useApiError()
 
@@ -220,6 +221,7 @@ function UserDialog({
       setRole('operador')
       setIsActive(true)
     }
+    setPassword('')
   }, [user, open])
 
   const handleSave = async () => {
@@ -227,14 +229,24 @@ function UserDialog({
       toast.warning('Nome e e-mail são obrigatórios')
       return
     }
+    if (!user && password && password.length < 8) {
+      toast.warning('A senha deve ter no mínimo 8 caracteres')
+      return
+    }
     setSaving(true)
     try {
-      const payload = { full_name: fullName, email, role, is_active: isActive }
       if (user) {
-        await api.put(`/admin/users/${user.id}`, payload)
+        await api.put(`/admin/users/${user.id}`, { full_name: fullName, email, role, is_active: isActive })
         toast.success('Usuário atualizado')
       } else {
-        await api.post('/admin/users', payload)
+        // Senha opcional: sem ela o usuário nasce com senha aleatória
+        await api.post('/admin/users', {
+          full_name: fullName,
+          email,
+          role,
+          is_active: isActive,
+          ...(password ? { password } : {}),
+        })
         toast.success('Usuário criado')
       }
       onSaved()
@@ -287,6 +299,22 @@ function UserDialog({
               </SelectContent>
             </Select>
           </div>
+          {!user && (
+            <div className="space-y-2">
+              <Label htmlFor="user-password">Senha inicial (opcional)</Label>
+              <Input
+                id="user-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Mínimo de 8 caracteres"
+                autoComplete="new-password"
+              />
+              <p className="text-xs text-muted-foreground">
+                Se deixar vazio, será gerada uma senha aleatória e será preciso repassá-la ao usuário.
+              </p>
+            </div>
+          )}
           <div className="flex items-center justify-between rounded-lg border border-border p-3">
             <div>
               <Label htmlFor="user-active" className="cursor-pointer">

@@ -322,3 +322,25 @@ npm run build
 | `date-fns` | Formatação de datas |
 | `clsx`, `tailwind-merge` | Classnames condicionais |
 | `msw` | Mock API (dev) |
+---
+
+## Atualização 04/09/2026
+
+### Novas telas: Sugestões de Artigo (gestor + operador)
+
+| Rota | Página | Descrição |
+|------|--------|-----------|
+| `/article-suggestions` | `pages/admin/ArticleSuggestions.tsx` | “Minhas Sugestões”: filtros de status/categoria na URL, paginação (20), ações por status (editar/cancelar quando pendente; excluir quando rejeitada; link do artigo quando publicada) |
+| `/article-suggestions/new` e `/article-suggestions/:id/edit` | `pages/admin/ArticleSuggestionEditor.tsx` | Reusa `ArticleForm` em modo sugestão (salva rascunho; sem Publicar) |
+| `/article-suggestions/:id` | `pages/admin/ArticleSuggestionEditor.tsx` | Edição de sugestão própria |
+| `/admin/article-suggestions/:id` | `pages/admin/ArticleSuggestionReview.tsx` | Revisão do gestor: **Aprovar e publicar**, **Aprovar com edição** ou **Rejeitar** com observação obrigatória |
+
+> Observação: no estado atual o editor de sugestão usa sempre o modo `suggestion-create` (edição cai no mesmo modo) e a feature está bloqueada no backend por GRANTs ausentes ([relatório de testes](RELATORIO_TESTES_E2E.md), Bugs #2/#5).
+
+### Tipo `AiSettings` ampliado
+
+`src/types/index.ts` inclui agora `EmbeddingProvider` (`sidecar | openai | gemini | custom`) e os campos `embedding_model`, `embedding_endpoint`, `embedding_api_key`, `stream_timeout_seconds`; `max_tokens` pode ser `null`. A tela `AISettings.tsx` tem 3 abas (Conexão / System Prompt / RAG & Confiança), indicador de saúde do sidecar, **Testar embedding** (`test-embed`) e **Testar prompt ao vivo** (SSE).
+
+### `useChat.ts` — comportamento de timeout
+
+Timeout **total único** (padrão 180 s) obtido de `GET /chat/config` (`stream_timeout_seconds`), abortando o stream, preservando texto parcial e injetando mensagem “⏱️ A resposta não foi concluída em N segundos”. Não há retry automático. Erros HTTP são expostos como `HTTP <status>` (melhoria pendente: extrair `body.message` — [Bug #5](RELATORIO_TESTES_E2E.md)).

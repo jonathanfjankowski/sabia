@@ -254,8 +254,12 @@ services:
 
 ## 📚 Documentação
 
+- [Documentação Técnica](docs/TECNICA.md) — Arquitetura, banco/RLS, serviços, fluxos, segurança, limitações conhecidas
 - [API Reference](docs/api.md) — Todos endpoints, auth, rate limits, códigos de erro
 - [Frontend Architecture](docs/frontend.md) — Componentes, stores, hooks, fluxos, tipos
+- [Manual do Usuário](docs/MANUAL_DO_USUARIO.md) — Guia por perfil (gestor, operador, visitante do widget) + embed do widget
+- [Relatório de Testes E2E](docs/RELATORIO_TESTES_E2E.md) — Resultados das suítes, testes GUI e bugs encontrados
+- [Embedding Sidecar](docs/EMBEDDING_SIDECAR.md) — Serviço local de embeddings (bge-m3)
 
 ---
 

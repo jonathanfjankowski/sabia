@@ -66,6 +66,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             Route::get('/search', [ArticleController::class, 'search']);
 
             // Chat (SSE)
+            Route::get('/chat/config', [ChatController::class, 'config']);
             Route::post('/chat', [ChatController::class, 'send'])->middleware('throttle:chat');
 
             // Conversations

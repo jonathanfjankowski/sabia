@@ -33,8 +33,8 @@ class SupportTransferService
 
         // 2) Verifica horário de suporte
         $now = Carbon::now();
-        $start = $settings->support_start_time ? Carbon::createFromFormat('H:i', $settings->support_start_time) : null;
-        $end = $settings->support_end_time ? Carbon::createFromFormat('H:i', $settings->support_end_time) : null;
+        $start = $this->parseSupportTime($settings->support_start_time);
+        $end = $this->parseSupportTime($settings->support_end_time);
 
         if ($start && $end && ! $this->isWithinHours($now, $start, $end)) {
             $result['reason'] = 'out_of_hours';
@@ -79,6 +79,36 @@ class SupportTransferService
 
         // Overnight range (e.g. 22:00–06:00)
         return $current >= $start->format('H:i') || $current <= $end->format('H:i');
+    }
+
+    /**
+     * A coluna é TIME no Postgres e chega como 'H:i:s' (ou 'H:i' em outros
+     * drivers) — createFromFormat('H:i', ...) estourava InvalidFormatException.
+     * Horário ausente/ilegível = sem restrição de horário.
+     */
+    private function parseSupportTime(?string $value): ?Carbon
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        foreach (['H:i:s', 'H:i', 'G:i'] as $format) {
+            try {
+                $parsed = Carbon::createFromFormat($format, $value);
+
+                if ($parsed !== false) {
+                    return $parsed;
+                }
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+
+        try {
+            return Carbon::parse($value);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function buildSupportLink(WidgetSettings $settings, Conversation $conversation): ?string
@@ -131,9 +161,14 @@ class SupportTransferService
         }
 
         $message = $conversation->messages()->latest()->first()?->content ?? '';
-        $this->teams->{'send'.ucfirst($type)}(
-            $conversation->user_name ?? 'Anônimo',
-            $message
-        );
+        $userName = $conversation->user_name ?? 'Anônimo';
+
+        // Mapeamento explícito: concatenação dinâmica com ucfirst gerava
+        // nomes inexistentes ("sendOut_of_hours") e fatal error no transfer
+        match ($type) {
+            'out_of_hours' => $this->teams->sendOutOfHours($userName, $message),
+            'maintenance' => $this->teams->sendMaintenance($userName, $message),
+            default => $this->teams->sendError($type, $message),
+        };
     }
 }

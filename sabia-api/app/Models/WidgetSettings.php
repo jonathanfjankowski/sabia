@@ -47,7 +47,12 @@ class WidgetSettings extends Model
         // __PHP_Incomplete_Class com allowed_classes=false)
         if (is_array($cached = cache()->get($key))) {
             // setRawAttributes pula os casts no set (senão '[]' viraria '"[]"')
-            return (new static)->setRawAttributes($cached, true);
+            $model = (new static)->setRawAttributes($cached, true);
+            // Sem exists=true o save() vira INSERT com o id já gravado
+            // (duplicate key / permission denied ao salvar da UI)
+            $model->exists = array_key_exists($model->getKeyName(), $cached);
+
+            return $model;
         }
 
         $settings = static::query()->first();

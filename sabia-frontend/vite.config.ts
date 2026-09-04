@@ -16,6 +16,13 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    // Fontes em bind mount do Windows (docker dev): inotify não enxerga
+    // mudanças através do mount e o Vite serve transformação em cache
+    // (código velho sem HMR). Polling resolve.
+    watch: {
+      usePolling: true,
+      interval: 1000,
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

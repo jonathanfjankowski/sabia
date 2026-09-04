@@ -42,6 +42,14 @@ class TeamsNotificationService
         ]);
     }
 
+    public function sendMaintenance(string $userName, string $message): bool
+    {
+        return $this->send('maintenance', [
+            'title' => '🛠️ Contato Durante Manutenção',
+            'text' => "Usuário **{$userName}** tentou contato com o sistema em manutenção.\n\nMensagem: {$message}",
+        ]);
+    }
+
     public function sendError(string $context, string $error): bool
     {
         return $this->send('error', [

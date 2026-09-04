@@ -21,6 +21,16 @@ class ChatController extends Controller
         private VectorSearchService $vectorSearch = new VectorSearchService,
     ) {}
 
+    // Config de cliente para o chat: timeout de resposta configurado pelo
+    // gestor (operador também usa o chat, por isso endpoint próprio em vez
+    // de /admin/settings/ai).
+    public function config(): JsonResponse
+    {
+        return response()->json([
+            'stream_timeout_seconds' => AiSettings::current()->stream_timeout_seconds,
+        ]);
+    }
+
     public function send(Request $request): StreamedResponse|JsonResponse
     {
         $data = $request->validate([

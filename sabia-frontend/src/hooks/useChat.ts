@@ -6,6 +6,8 @@ interface UseChatOptions {
   endpoint: '/chat' | '/widget/chat'
   initialConversationId?: string
   initialMessages?: Message[]
+  /** Tempo máximo de espera pela resposta, em ms. Padrão: 180s (configurável pelo gestor em IA → Conexão). */
+  timeoutMs?: number
 }
 
 interface StreamCallbacks {
@@ -16,14 +18,20 @@ interface StreamCallbacks {
   onTimeout?: () => void
 }
 
-const STREAM_TIMEOUT_MS = 60_000
+// Timeout TOTAL de espera. Não há timer de "silêncio": o backend ecoa o
+// conversation_id imediatamente e depois fica em silêncio enquanto o modelo
+// pensa — silêncio pós-primeiro-byte é normal. Provedor travado de verdade é
+// cortado pelo timeout(120) do AIProvider, que devolve erro no próprio stream.
+const DEFAULT_TIMEOUT_MS = 180_000
 
 /**
  * Hook that reads a Laravel SSE stream (section 5.3).
- * Auto-aborts after 60s without [DONE] and fires onTimeout().
+ * Aborts after `timeoutMs` in total, preserving partial text and posting an
+ * automatic timeout message.
  */
 export function useChat(options: UseChatOptions) {
-  const { endpoint, initialConversationId, initialMessages } = options
+  const { endpoint, initialConversationId, initialMessages, timeoutMs } = options
+  const maxTimeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingText, setStreamingText] = useState('')
   const [conversationId, setConversationId] = useState<string | undefined>(initialConversationId)
@@ -31,12 +39,12 @@ export function useChat(options: UseChatOptions) {
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const convIdRef = useRef<string | undefined>(initialConversationId)
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const totalTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const clearStreamTimeout = useCallback(() => {
-    if (timeoutRef.current !== undefined) {
-      window.clearTimeout(timeoutRef.current)
-      timeoutRef.current = undefined
+    if (totalTimeoutRef.current !== undefined) {
+      window.clearTimeout(totalTimeoutRef.current)
+      totalTimeoutRef.current = undefined
     }
   }, [])
 
@@ -60,11 +68,35 @@ export function useChat(options: UseChatOptions) {
       const controller = new AbortController()
       abortRef.current = controller
 
-      clearStreamTimeout()
-      timeoutRef.current = window.setTimeout(() => {
+      let timedOut = false
+      const abortByTimeout = () => {
+        timedOut = true
         controller.abort()
         callbacks?.onTimeout?.()
-      }, STREAM_TIMEOUT_MS)
+      }
+
+      clearStreamTimeout()
+      totalTimeoutRef.current = window.setTimeout(abortByTimeout, maxTimeoutMs)
+
+      // Declarados fora do try: o catch precisa do texto acumulado para
+      // preservar resposta parcial em abort/timeout.
+      let assistantText = ''
+      let assistantMessage: Message | null = null
+
+      const appendAssistant = (content: string) => {
+        const message: Message = {
+          id: Date.now(),
+          conversation_id: convIdRef.current ?? '',
+          role: 'assistant',
+          content,
+          has_images: false,
+          created_at: new Date().toISOString(),
+        }
+        setMessages((prev) => [...prev, message])
+        callbacks?.onMessageEnd?.(message, convIdRef.current ?? '')
+
+        return message
+      }
 
       try {
         const res = await api.raw(endpoint, {
@@ -72,14 +104,17 @@ export function useChat(options: UseChatOptions) {
           body: JSON.stringify({ message: text, conversation_id: convIdRef.current, images }),
           signal: controller.signal,
         })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        if (!res.ok) {
+          // O backend devolve { message } amigável nos bloqueios/erros
+          // (ex.: prompt injection) — mostrar isso em vez de "HTTP 400"
+          const body = (await res.json().catch(() => null)) as { message?: string } | null
+          throw new Error(body?.message || `HTTP ${res.status}`)
+        }
         if (!res.body) throw new Error('Sem stream')
 
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
-        let assistantText = ''
-        let assistantMessage: Message | null = null
 
         callbacks?.onMessageStart?.()
 
@@ -115,36 +150,50 @@ export function useChat(options: UseChatOptions) {
           }
         }
 
-        clearStreamTimeout()
-
         if (assistantMessage) {
           setMessages((prev) => [...prev, assistantMessage!])
           callbacks?.onMessageEnd?.(assistantMessage, convIdRef.current ?? '')
         } else if (assistantText) {
-          const fallback: Message = {
-            id: Date.now(),
-            conversation_id: convIdRef.current ?? '',
-            role: 'assistant',
-            content: assistantText,
-            has_images: false,
-            created_at: new Date().toISOString(),
-          }
-          setMessages((prev) => [...prev, fallback])
-          callbacks?.onMessageEnd?.(fallback, convIdRef.current ?? '')
+          appendAssistant(assistantText)
+        } else {
+          // Stream encerrou sem resposta (ex.: provedor de IA derrubou a
+          // conexão): falhar em silêncio deixa o usuário sem feedback.
+          const err = new Error('O assistente não retornou resposta. Tente novamente.')
+          setError(err.message)
+          callbacks?.onError?.(err)
         }
       } catch (err) {
-        clearStreamTimeout()
-        if ((err as Error).name !== 'AbortError') {
+        const isAbort = (err as Error).name === 'AbortError'
+
+        if (assistantText) {
+          // Parada no meio da geração (timeout ou botão "Parar"): preserva
+          // o que já chegou em vez de descartar em silêncio.
+          appendAssistant(assistantText)
+        } else if (timedOut) {
+          // Mensagem automática de timeout, visível na conversa.
+          const seconds = Math.round(maxTimeoutMs / 1000)
+          appendAssistant(
+            `⏱️ A resposta não foi concluída em ${seconds} segundos (tempo limite). Tente novamente.`,
+          )
+        }
+
+        if (!isAbort) {
           setError((err as Error).message)
           callbacks?.onError?.(err as Error)
+        } else if (timedOut && callbacks?.onError) {
+          callbacks.onError(new Error('timeout'))
         }
       } finally {
+        clearStreamTimeout()
         setIsStreaming(false)
         setStreamingText('')
         abortRef.current = null
       }
     },
-    [endpoint, clearStreamTimeout]
+    // maxTimeoutMs/idleMs derivam de timeoutMs; incluir timeoutMs nas deps
+    // para rearmar os timers quando o gestor mudar a config ao vivo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [endpoint, timeoutMs, clearStreamTimeout]
   )
 
   const stop = useCallback(() => {
@@ -161,5 +210,5 @@ export function useChat(options: UseChatOptions) {
     setError(null)
   }, [clearStreamTimeout])
 
-  return { messages, isStreaming, streamingText, conversationId, error, send, stop, reset, setMessages }
+  return { messages, isStreaming, streamingText, conversationId, error, send, stop, reset, setMessages, setConversationId }
 }

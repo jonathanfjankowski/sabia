@@ -15,10 +15,12 @@ import {
   ThumbsDown,
   ChevronDown,
   FileText,
+  CircleAlert,
+  History,
 } from 'lucide-react'
 import { useChat } from '@/hooks/useChat'
 import { api } from '@/lib/api'
-import type { Message } from '@/types'
+import type { Conversation, Message } from '@/types'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -28,22 +30,33 @@ import { StarRating } from '@/components/common/StarRating'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Card } from '@/components/ui/card'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { cn, formatTime, initials, downloadText } from '@/lib/utils'
+import { cn, formatRelativeTime, formatTime, initials, downloadText } from '@/lib/utils'
 import { toast } from '@/stores/toast'
 import { useAuthStore } from '@/stores/auth'
 
 export function Chat() {
   const user = useAuthStore((s) => s.user)
+  // Timeout de resposta configurado pelo gestor (IA → Conexão)
+  const [chatTimeoutMs, setChatTimeoutMs] = useState<number | undefined>(undefined)
+  useEffect(() => {
+    api
+      .get<{ stream_timeout_seconds: number }>('/chat/config')
+      .then((r) => setChatTimeoutMs(r.stream_timeout_seconds * 1000))
+      .catch(() => {})
+  }, [])
+
   const {
     messages,
     isStreaming,
     streamingText,
     conversationId,
+    error: chatError,
     send,
     stop,
     reset,
     setMessages,
-  } = useChat({ endpoint: '/chat' })
+    setConversationId,
+  } = useChat({ endpoint: '/chat', timeoutMs: chatTimeoutMs })
 
   const [input, setInput] = useState('')
   const [images, setImages] = useState<string[]>([])
@@ -52,6 +65,51 @@ export function Chat() {
   const [rated, setRated] = useState<number | null>(null)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({})
+
+  /* ---------------- Histórico de conversas ---------------- */
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [history, setHistory] = useState<Conversation[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [loadingConvId, setLoadingConvId] = useState<string | null>(null)
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true)
+    try {
+      const all = await api.get<Conversation[]>('/conversations')
+      // O painel é do chat interno: ignora conversas de origem widget/kb
+      setHistory(all.filter((c) => c.source === 'direct'))
+    } catch {
+      toast.error('Erro ao carregar histórico')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [])
+
+  const toggleHistory = () => {
+    const next = !historyOpen
+    setHistoryOpen(next)
+    if (next) loadHistory()
+  }
+
+  const handleOpenConversation = async (conv: Conversation) => {
+    if (isStreaming || loadingConvId) return
+    setLoadingConvId(conv.id)
+    try {
+      const msgs = await api.get<Message[]>(`/conversations/${conv.id}/messages`)
+      setMessages(msgs)
+      setConversationId(conv.id)
+      // Conversa já avaliada não deve reapresentar o prompt de avaliação
+      setRated(conv.rating ?? null)
+      setPendingRating(false)
+      setFeedback({})
+      isAtBottomRef.current = true
+      setHistoryOpen(false)
+    } catch {
+      toast.error('Erro ao carregar conversa')
+    } finally {
+      setLoadingConvId(null)
+    }
+  }
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -246,6 +304,10 @@ export function Chat() {
           icon={<MessageSquare className="h-5 w-5" />}
           actions={
             <>
+              <Button variant="outline" size="sm" onClick={toggleHistory}>
+                <History className="h-3.5 w-3.5" />
+                Histórico
+              </Button>
               <Button variant="outline" size="sm" onClick={handleExport} disabled={!conversationId}>
                 <Download className="h-3.5 w-3.5" />
                 Exportar
@@ -314,6 +376,13 @@ export function Chat() {
             )}
 
             {isStreaming && <StreamingBubble text={streamingText} />}
+
+            {chatError && !isStreaming && (
+              <div className="mx-auto flex max-w-md items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive animate-fade-in-up">
+                <CircleAlert className="h-4 w-4 shrink-0" />
+                {chatError}
+              </div>
+            )}
 
             {pendingRating && rated === null && !isStreaming && (
               <RatingPrompt onRate={handleRate} onSkip={() => setPendingRating(false)} />
@@ -455,6 +524,75 @@ export function Chat() {
               <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-primary bg-card/80 px-8 py-6 shadow-xl">
                 <Paperclip className="h-6 w-6 text-primary" />
                 <p className="text-xs font-medium">Solte as imagens aqui</p>
+              </div>
+            </div>
+          )}
+
+          {/* Painel de histórico de conversas */}
+          {historyOpen && (
+            <div className="absolute inset-y-0 right-0 z-30 flex w-72 animate-fade-in-up flex-col border-l border-border/60 bg-background/95 backdrop-blur sm:w-80">
+              <div className="flex items-center justify-between border-b border-border/60 px-3 py-2.5">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                  <History className="h-3.5 w-3.5 text-primary" />
+                  Histórico
+                </div>
+                <button
+                  onClick={() => setHistoryOpen(false)}
+                  className="rounded p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  aria-label="Fechar histórico"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-2">
+                {historyLoading ? (
+                  <p className="px-2 py-6 text-center text-xs text-muted-foreground">Carregando…</p>
+                ) : history.length === 0 ? (
+                  <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+                    Nenhuma conversa ainda.
+                  </p>
+                ) : (
+                  <ul className="space-y-1">
+                    {history.map((c) => (
+                      <li key={c.id}>
+                        <button
+                          onClick={() => handleOpenConversation(c)}
+                          disabled={loadingConvId !== null || isStreaming}
+                          className={cn(
+                            'w-full rounded-lg border px-2.5 py-2 text-left transition disabled:opacity-50',
+                            c.id === conversationId
+                              ? 'border-primary/50 bg-primary/5'
+                              : 'border-transparent hover:border-border hover:bg-muted/40'
+                          )}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-xs font-medium text-foreground">
+                              {c.title || 'Sem título'}
+                            </span>
+                            <span className="shrink-0 text-[10px] text-muted-foreground">
+                              {formatRelativeTime(c.created_at)}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <span
+                              className={cn(
+                                'rounded px-1 py-0.5 text-[9px]',
+                                c.is_closed ? 'bg-muted text-muted-foreground' : 'bg-success/15 text-success'
+                              )}
+                            >
+                              {c.is_closed ? 'Encerrada' : 'Aberta'}
+                            </span>
+                            {c.rating ? <StarRating value={c.rating} readOnly size="sm" /> : null}
+                            {loadingConvId === c.id && (
+                              <span className="text-[9px] text-muted-foreground">carregando…</span>
+                            )}
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           )}

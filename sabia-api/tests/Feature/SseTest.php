@@ -6,6 +6,7 @@ use App\Models\Profile;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class SseTest extends TestCase
@@ -16,6 +17,23 @@ class SseTest extends TestCase
     {
         parent::setUp();
         $this->artisan('migrate', ['--seed' => true]);
+
+        // O chat faz embed da pergunta antes de streamar: sem fake, os testes
+        // chamariam o sidecar REAL (e o 503 de "embedding vazio" dispararia
+        // conforme a disponibilidade dele ou da flag embedding_sidecar.down).
+        // Mesmo fake do RagTest — responde N vetores conforme o request.
+        $vector = fn () => array_fill(0, 1024, 0.1);
+        Http::fake([
+            '*/embed/batch' => function ($request) use ($vector) {
+                $texts = $request['texts'] ?? [];
+
+                return Http::response(['vectors' => array_map($vector, $texts)]);
+            },
+            '*/embed' => Http::response([
+                'vector' => $vector(),
+                'dimensions' => 1024,
+            ]),
+        ]);
     }
 
     public function test_chat_returns_sse_stream(): void

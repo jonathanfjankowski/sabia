@@ -331,3 +331,48 @@ window.SabiáWidget.close()
 window.SabiáWidget.toggle()
 window.SabiáWidget.isOpen() // boolean
 ```
+---
+
+## Atualização 04/09/2026 — Endpoints não documentados anteriormente
+
+> Complemento auditado contra `routes/api.php`. Referência técnica completa em [TECNICA.md](TECNICA.md).
+
+### Públicos
+
+| Método | Endpoint | Descrição | Rate limit |
+|--------|----------|-----------|------------|
+| GET | `/health` | Health check da API (`{"status":"ok"}`) | — |
+
+### Autenticados (gestor + operador)
+
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| GET | `/chat/config` | Configuração do chat para o cliente (`stream_timeout_seconds`) |
+| POST | `/articles/{id}/view` | Registra visualização manual do artigo |
+| GET | `/article-suggestions` | Lista sugestões (operador: próprias; gestor: todas, filtro `status`) — paginação 20 |
+| POST | `/article-suggestions` | Cria sugestão (status `pending`) |
+| GET | `/article-suggestions/{id}` | Detalhe da sugestão |
+| PUT | `/article-suggestions/{id}` | Edita sugestão do próprio autor (só se `pending`) |
+| POST | `/article-suggestions/{id}/cancel` | Cancela sugestão do próprio autor |
+
+### Admin (gestor)
+
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| GET | `/admin/articles/{id}` | Detalhe administrativo (inclui rascunhos/arquivados) |
+| POST | `/admin/articles/{id}/restore` | Restaura artigo com soft-delete |
+| POST | `/admin/settings/ai/test-embed` | Testa o provedor de embeddings (retorna latência e dimensões) |
+| GET | `/admin/embedding-sidecar/health` | Estado do sidecar local (`EMBEDDING_URL`) |
+| POST | `/admin/article-suggestions/{id}/approve` | Aprova e publica sugestão como artigo |
+| POST | `/admin/article-suggestions/{id}/approve-with-edit` | Aprova com ajustes antes de publicar |
+| POST | `/admin/article-suggestions/{id}/reject` | Rejeita com `review_notes` obrigatório |
+
+### Campos novos em `ai_settings` (GET/PUT `/admin/settings/ai`)
+
+- `embedding_provider`: `sidecar` (padrão) | `openai` | `gemini` | `custom`
+- `embedding_model`, `embedding_endpoint`, `embedding_api_key` (credenciais separadas para o provedor de embeddings)
+- `stream_timeout_seconds`: 10–600 (default 180) — timeout do stream de chat
+- `max_tokens`: agora **nullable** (null = não envia o parâmetro ao provedor)
+- Respostas incluem `api_key`/`embedding_api_key` **mascaradas** (`••••••••`); reenviar a máscara não sobrescreve o segredo. Ações sensíveis são auditadas com segredos redigidos.
+
+> ⚠️ Estado atual da feature de sugestões: endpoints implementados, porém a tabela `article_suggestions` está sem GRANTs/policies RLS — requisições retornam 500 (ver [RELATORIO_TESTES_E2E.md](RELATORIO_TESTES_E2E.md), Bug #2).

@@ -193,9 +193,10 @@ export const router = createBrowserRouter([
       { path: '/article-suggestions/:id', element: <SuspenseBoundary><ArticleSuggestionEditor /></SuspenseBoundary> },
       { path: '/article-suggestions/:id/edit', element: <SuspenseBoundary><ArticleSuggestionEditor /></SuspenseBoundary> },
       { path: '/admin/article-suggestions/:id', element: <Protected role="gestor"><SuspenseBoundary><ArticleSuggestionReview /></SuspenseBoundary></Protected> },
-
-  { path: '/widget', element: <SuspenseBoundary><PublicWidget /></SuspenseBoundary> },
     ],
   },
+  // Widget público: FORA do layout autenticado — o visitante anônimo do
+  // embed (iframe do sabia-widget.js) não tem sessão e não pode ver a AppShell
+  { path: '/widget', element: <SuspenseBoundary><PublicWidget /></SuspenseBoundary> },
   { path: '*', element: <NotFound /> },
 ])
