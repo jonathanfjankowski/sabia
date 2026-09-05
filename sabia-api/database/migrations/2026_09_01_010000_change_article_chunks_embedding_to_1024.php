@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
  * article_chunks.embedding: VECTOR(768) → VECTOR(1024).
  *
  * O provedor padrão de embeddings passa a ser o sidecar local
- * (BAAI/bge-m3, 1024 dims — ver EMBEDDING_SIDECAR.md). O modelo anterior
+ * (BAAI/bge-m3, 1024 dims — ver docs/arquitetura.md). O modelo anterior
  * (text-embedding-004) produz 768; os vetores existentes ficam inválidos
  * após a troca — rodar `php artisan chunks:reembed` imediatamente depois.
  *

@@ -64,7 +64,7 @@ services:
     networks:
       - sabia-dev-network
 
-  # Sidecar de embeddings (BAAI/bge-m3, 1024 dims) — ver EMBEDDING_SIDECAR.md.
+  # Sidecar de embeddings (BAAI/bge-m3, 1024 dims) — ver docs/arquitetura.md.
   # Primeiro build demora: baixa ~1GB de modelo.
   embedding-sidecar:
     build: ./embedding-sidecar

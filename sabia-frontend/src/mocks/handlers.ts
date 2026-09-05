@@ -662,7 +662,7 @@ export const handlers = [
     })
   }),
 
-  // ─── Admin: Embedding sidecar (ver EMBEDDING_SIDECAR.md) ─────────────────
+  // ─── Admin: Embedding sidecar (ver docs/arquitetura.md) ─────────────────
   http.post(`${API}/admin/settings/ai/test-embed`, async ({ request }) => {
     const user = requireAuth(request)
     if (!user || user.role !== 'gestor') return unauthorized()

@@ -335,7 +335,7 @@ window.SabiáWidget.isOpen() // boolean
 
 ## Atualização 04/09/2026 — Endpoints não documentados anteriormente
 
-> Complemento auditado contra `routes/api.php`. Referência técnica completa em [TECNICA.md](TECNICA.md).
+> Complemento auditado contra `routes/api.php`. Referência técnica completa em [arquitetura.md](arquitetura.md).
 
 ### Públicos
 
@@ -375,4 +375,4 @@ window.SabiáWidget.isOpen() // boolean
 - `max_tokens`: agora **nullable** (null = não envia o parâmetro ao provedor)
 - Respostas incluem `api_key`/`embedding_api_key` **mascaradas** (`••••••••`); reenviar a máscara não sobrescreve o segredo. Ações sensíveis são auditadas com segredos redigidos.
 
-> ⚠️ Estado atual da feature de sugestões: endpoints implementados, porém a tabela `article_suggestions` está sem GRANTs/policies RLS — requisições retornam 500 (ver [RELATORIO_TESTES_E2E.md](RELATORIO_TESTES_E2E.md), Bug #2).
+> Nota: a tabela `article_suggestions` nasceu sem GRANTs/policies RLS (as rotas retornavam 500); corrigido pela migration `2026_09_04_150000_grant_rls_article_suggestions_table`.

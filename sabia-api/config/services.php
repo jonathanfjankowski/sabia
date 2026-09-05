@@ -36,7 +36,7 @@ return [
     ],
 
     // Sidecar Python de embeddings (BAAI/bge-m3, 1024 dims).
-    // Ver EMBEDDING_SIDECAR.md.
+    // Ver docs/arquitetura.md.
     'embedding' => [
         'url' => env('EMBEDDING_URL', 'http://localhost:8000'),
         'token' => env('EMBEDDING_TOKEN'),

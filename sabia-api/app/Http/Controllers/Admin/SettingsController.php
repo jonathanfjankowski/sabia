@@ -113,7 +113,7 @@ class SettingsController extends Controller
         ]);
     }
 
-    // Testa conexão com o sidecar de embeddings (ver EMBEDDING_SIDECAR.md).
+    // Testa conexão com o sidecar de embeddings (ver docs/arquitetura.md).
     public function testEmbed(): JsonResponse
     {
         $t0 = microtime(true);

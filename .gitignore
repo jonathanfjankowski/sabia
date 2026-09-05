@@ -1,0 +1,36 @@
+# Dependências
+node_modules/
+vendor/
+
+# Builds e artefatos
+dist/
+*.tsbuildinfo
+
+# Ambiente / segredos (mantém os .env.example)
+.env
+.env.*
+!.env.example
+
+# Logs e saídas de teste
+*.log
+*-output.txt
+*-result.txt
+coverage/
+playwright-report/
+test-results/
+.phpunit.cache
+.phpunit.result.cache
+
+# Artefatos de sessões de teste GUI
+gui-test-screenshots/
+
+# Ferramentas de IA/agente
+.zcode/
+.claude/
+CLAUDE.md
+
+# IDE / sistema operacional
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

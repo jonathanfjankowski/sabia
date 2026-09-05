@@ -1,6 +1,6 @@
 """Embedding sidecar — API de embeddings BAAI/bge-m3 (1024 dims).
 
-Ver EMBEDDING_SIDECAR.md na raiz do repo para arquitetura e deploy.
+Ver docs/arquitetura.md (seção "Embedding sidecar") para arquitetura e deploy.
 """
 
 import os

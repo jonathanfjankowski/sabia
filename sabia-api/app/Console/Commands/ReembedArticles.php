@@ -11,7 +11,7 @@ use Illuminate\Console\Command;
  *
  * Obrigatório após trocar a dimensão do vetor (768 → 1024, migration
  * 2026_09_01_010000) — os vetores antigos ficam inválidos. Ver
- * EMBEDDING_SIDECAR.md.
+ * docs/arquitetura.md.
  */
 class ReembedArticles extends Command
 {
